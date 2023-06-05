@@ -57,6 +57,8 @@ struct State {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
+    texture_a: wgpu::Texture, // double buffer
+    texture_b: wgpu::Texture,
 }
 
 impl State {
@@ -191,6 +193,39 @@ impl State {
 
         let num_indices = INDICES.len() as u32;
 
+        let width = 512;
+        let height = 512;
+
+        let texture_a = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Texture A"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        let texture_b = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Texture B"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
 
         Self {
             window,
@@ -203,6 +238,8 @@ impl State {
             vertex_buffer,
             index_buffer,
             num_indices,
+            texture_a,
+            texture_b,
         }
     }
 
