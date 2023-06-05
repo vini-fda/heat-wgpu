@@ -1,0 +1,12 @@
+[package]
+name = "poisson-wgpu"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytemuck = { version = "1.13.1", features = ["derive"] }
+env_logger = "0.10.0"
+log = "0.4"
+pollster = "0.3.0"
+wgpu = "0.16.0"
+winit = "0.28.6"
