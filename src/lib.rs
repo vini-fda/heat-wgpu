@@ -107,7 +107,7 @@ impl State {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::empty(),
+                    features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     limits: if cfg!(target_arch = "wasm32") {
@@ -168,7 +168,7 @@ impl State {
         });
 
         // Initialize texture A with some data
-        let input_data = vec![100.0f32; (width * height) as usize];
+        let input_data = vec![1.0f32; (width * height) as usize];
         queue.write_texture(
             texture_a.as_image_copy(),
             bytemuck::cast_slice(input_data.as_slice()),
@@ -481,6 +481,7 @@ impl State {
         } else {
             compute_pass.set_bind_group(0, &self.compute_texture_bind_group_backward, &[]);
         }
+        self.iteration += 1;
         compute_pass.dispatch_workgroups(dispatch_width, dispatch_height, 1);
         drop(compute_pass);
         self.queue.submit(std::iter::once(encoder.finish()));
