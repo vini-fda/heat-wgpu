@@ -168,7 +168,7 @@ impl State {
         });
 
         // Initialize texture A with some data
-        let input_data = vec![1.0f32; (width * height) as usize];
+        let input_data = generate_input_data(width, height);
         queue.write_texture(
             texture_a.as_image_copy(),
             bytemuck::cast_slice(input_data.as_slice()),
@@ -597,4 +597,31 @@ fn compute_work_group_count(
     let y = (height + workgroup_height - 1) / workgroup_height;
 
     (x, y)
+}
+
+fn gaussian(x: f32) -> f32 {
+    const SIGMA: f32 = 0.5;
+    const SIGMA2: f32 = SIGMA * SIGMA;
+    const ROOT_2PI: f32 = 2.50662827;
+    (1.0 / (ROOT_2PI * SIGMA)) * (-x * x / (2.0 * SIGMA2)).exp()
+}
+
+fn generate_input_data(width: u32, height: u32) -> Vec<f32> {
+    use noise::{NoiseFn, Perlin, Seedable};
+    let mut data = vec![0.0; (width * height) as usize];
+    const WIDTH: f32 = 1.0;
+    const HEIGHT: f32 = 1.0;
+    let perlin = Perlin::new(1);
+    for i in 0..width {
+        for j in 0..height {
+            let x = (i as f32 / width as f32) * WIDTH;
+            let y = (j as f32 / height as f32) * HEIGHT;
+            let x = x - WIDTH / 2.0;
+            let y = y - HEIGHT / 2.0;
+            let r = (x * x + y * y).sqrt();
+            let noise = perlin.get([x as f64 * 10.0, y as f64 * 10.0, 0.0]) as f32;
+            data[(i + j * width) as usize] = gaussian(r) + noise;
+        }
+    }
+    data
 }
