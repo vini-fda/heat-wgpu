@@ -286,7 +286,7 @@ impl State {
                     },
                 ],
             });
-        
+
         // -------- Render pass config --------
 
         let render_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -323,46 +323,48 @@ impl State {
                     },
                 ],
             });
-        
+
         // Creates a bind group for the render pass
         // in the forward configuration, which means that the texture B
         // is to be rendered to the screen
-        let render_texture_bind_group_forward = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
+        let render_texture_bind_group_forward =
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Render texture bind group (forward configuration)"),
                 layout: &render_texture_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&texture_b.create_view(&wgpu::TextureViewDescriptor::default())),
+                        resource: wgpu::BindingResource::TextureView(
+                            &texture_b.create_view(&wgpu::TextureViewDescriptor::default()),
+                        ),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
                         resource: wgpu::BindingResource::Sampler(&render_sampler),
                     },
                 ],
-            }
-        );
+            });
 
         // Creates a bind group for the render pass
         // in the backward configuration, which means that the texture A
         // is to be rendered to the screen
-        let render_texture_bind_group_backward = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
+        let render_texture_bind_group_backward =
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Render texture bind group (backward configuration)"),
                 layout: &render_texture_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&texture_a.create_view(&wgpu::TextureViewDescriptor::default())),
+                        resource: wgpu::BindingResource::TextureView(
+                            &texture_a.create_view(&wgpu::TextureViewDescriptor::default()),
+                        ),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
                         resource: wgpu::BindingResource::Sampler(&render_sampler),
                     },
                 ],
-            }
-        );
+            });
 
         let render_shader = device.create_shader_module(wgpu::include_wgsl!("shaders/render.wgsl"));
         let render_pipeline_layout =
