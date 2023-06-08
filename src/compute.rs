@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use std::cell::Cell;
+use std::{rc::Rc, sync::Arc};
 
 use crate::directional_bind_group::{Direction, DirectionalBindGroup};
 
@@ -11,7 +12,7 @@ pub struct Compute {
 impl Compute {
     pub fn new(
         device: &wgpu::Device,
-        direction: Arc<Direction>,
+        direction: Rc<Cell<Direction>>,
         texture_size: wgpu::Extent3d,
         texture_a: &wgpu::TextureView,
         texture_b: &wgpu::TextureView,

@@ -1,3 +1,5 @@
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::directional_bind_group::{Direction, DirectionalBindGroup};
@@ -24,7 +26,7 @@ pub struct Renderer {
 impl Renderer {
     pub fn new(
         device: &wgpu::Device,
-        direction: Arc<Direction>,
+        direction: Rc<Cell<Direction>>,
         config: &wgpu::SurfaceConfiguration,
         texture_a: &wgpu::TextureView,
         texture_b: &wgpu::TextureView,

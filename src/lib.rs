@@ -2,8 +2,9 @@ pub mod compute;
 mod directional_bind_group;
 pub mod renderer;
 pub mod vertex;
+use std::cell::Cell;
 
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use winit::{
     event::*,
@@ -22,6 +23,7 @@ struct State {
     window: Window,
     compute: Compute,
     renderer: Renderer,
+    direction: Rc<Cell<Direction>>,
     iteration: u32,
 }
 
@@ -143,10 +145,10 @@ impl State {
         let txa_view = &texture_a.create_view(&wgpu::TextureViewDescriptor::default());
         let txb_view = &texture_b.create_view(&wgpu::TextureViewDescriptor::default());
 
-        let direction = Arc::new(Direction::Forward);
+        let direction = Rc::new(Cell::new(Direction::Forward));
 
         let compute = Compute::new(&device, direction.clone(), texture_size, txa_view, txb_view);
-        let renderer = Renderer::new(&device, direction, &config, txa_view, txb_view);
+        let renderer = Renderer::new(&device, direction.clone(), &config, txa_view, txb_view);
 
         Self {
             window,
@@ -157,6 +159,7 @@ impl State {
             size,
             compute,
             renderer,
+            direction,
             iteration: 0,
         }
     }
@@ -181,6 +184,15 @@ impl State {
     fn compute_step(&mut self) {
         self.compute.step(&mut self.device, &self.queue);
         self.iteration += 1;
+        let d = self.direction.as_ref();
+        match d.get() {
+            Direction::Forward => {
+                d.set(Direction::Backward);
+            }
+            Direction::Backward => {
+                d.set(Direction::Forward);
+            }
+        }
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
