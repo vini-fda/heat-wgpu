@@ -17,5 +17,5 @@ fn decay_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let value = sum / 9.0;
 
-    textureStore(output_texture, coords, value * 0.9999);
+    textureStore(output_texture, coords, value * 0.999);
 }
