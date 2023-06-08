@@ -18,8 +18,8 @@ impl Compute {
         texture_b: &wgpu::TextureView,
     ) -> Self {
         let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Decay shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/decay.wgsl").into()),
+            label: Some("Heat equation shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/heat.wgsl").into()),
         });
 
         let compute_texture_bind_group_layout =
@@ -51,16 +51,16 @@ impl Compute {
 
         let compute_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Decay pipeline layout"),
+                label: Some("Heat pipeline layout"),
                 bind_group_layouts: &[&compute_texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Decay pipeline"),
+            label: Some("Heat pipeline"),
             layout: Some(&compute_pipeline_layout),
             module: &compute_shader,
-            entry_point: "decay_main",
+            entry_point: "heat_main",
         });
 
         // Create bind group for compute shader
@@ -119,7 +119,7 @@ impl Compute {
             (16, 16),
         );
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("Decay pass"),
+            label: Some("Heat pass"),
         });
         compute_pass.set_pipeline(&self.pipeline);
         compute_pass.set_bind_group(0, self.bind_group.get(), &[]);
