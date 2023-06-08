@@ -1,5 +1,5 @@
 use std::cell::Cell;
-use std::{rc::Rc, sync::Arc};
+use std::rc::Rc;
 
 #[derive(Clone, Copy)]
 pub enum Direction {

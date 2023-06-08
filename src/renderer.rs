@@ -1,6 +1,5 @@
 use std::cell::Cell;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use crate::directional_bind_group::{Direction, DirectionalBindGroup};
 use crate::vertex::Vertex;
