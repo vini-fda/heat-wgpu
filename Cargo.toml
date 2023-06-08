@@ -1,5 +1,5 @@
 [package]
-name = "poisson-wgpu"
+name = "heat-wgpu"
 version = "0.1.0"
 edition = "2021"
 

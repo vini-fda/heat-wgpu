@@ -658,6 +658,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "heat-wgpu"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "env_logger",
+ "image",
+ "log",
+ "noise",
+ "pollster",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "hermit-abi"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1257,20 +1271,6 @@ dependencies = [
  "fdeflate",
  "flate2",
  "miniz_oxide 0.7.1",
-]
-
-[[package]]
-name = "poisson-wgpu"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "env_logger",
- "image",
- "log",
- "noise",
- "pollster",
- "wgpu",
- "winit",
 ]
 
 [[package]]
