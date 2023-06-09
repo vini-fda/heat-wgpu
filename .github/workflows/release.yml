@@ -5,6 +5,8 @@ on:
 
 jobs:
   release:
+    permissions:
+      contents: write
     name: release ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
