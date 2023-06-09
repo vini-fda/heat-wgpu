@@ -14,13 +14,13 @@ jobs:
         include:
           - name: Linux
             os: ubuntu-latest
-            copy: mkdir package && cp -R res config package/ && cd target/release && cp road model level convert ../../package
+            copy: mkdir package && cp target/release/heat-wgpu package/
           - name: macOS
             os: macos-latest
-            copy: mkdir package && cp -R res config package/ && cd target/release && cp road model level convert ../../package
+            copy: mkdir package && cp target/release/heat-wgpu package/
           - name: Windows
             os: windows-latest
-            copy: mkdir package && xcopy res package\\res /s/i && xcopy config package\\config /s/i && copy target\\release\\*.exe package
+            copy: mkdir package && copy target\\release\\*.exe package
     steps:
       - uses: actions/checkout@v2
       - name: Build
