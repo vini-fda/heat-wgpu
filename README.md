@@ -1,5 +1,8 @@
 # heat-wgpu
 
+![GitHub release (latest by date including pre-releases)](https://img.shields.io/github/v/release/vini-fda/heat-wgpu?include_prereleases)
+![GitHub](https://img.shields.io/github/license/vini-fda/heat-wgpu)
+
 This is a Rust program which leverages computing and rendering capabilities of modern GPUs to solve the heat equation PDE and display results in real time. It is based on the `wgpu` crate, which is a Rust wrapper around the WebGPU API.
 
 The heat equation is a partial differential equation which describes the flow of heat in a given domain. For a 2D domain, it is given by the following equation:
