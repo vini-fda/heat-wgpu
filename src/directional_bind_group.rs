@@ -1,5 +1,4 @@
-use std::cell::Cell;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 #[derive(Clone, Copy)]
 pub enum Direction {
@@ -8,14 +7,14 @@ pub enum Direction {
 }
 
 pub struct DirectionalBindGroup {
-    direction: Rc<Cell<Direction>>,
+    direction: Arc<RwLock<Direction>>,
     bind_group_forward: wgpu::BindGroup,
     bind_group_backward: wgpu::BindGroup,
 }
 
 impl DirectionalBindGroup {
     pub fn new(
-        direction: Rc<Cell<Direction>>,
+        direction: Arc<RwLock<Direction>>,
         bind_group_forward: wgpu::BindGroup,
         bind_group_backward: wgpu::BindGroup,
     ) -> Self {
@@ -26,7 +25,7 @@ impl DirectionalBindGroup {
         }
     }
     pub fn get(&self) -> &wgpu::BindGroup {
-        match self.direction.as_ref().get() {
+        match *self.direction.read().unwrap() {
             Direction::Forward => &self.bind_group_forward,
             Direction::Backward => &self.bind_group_backward,
         }

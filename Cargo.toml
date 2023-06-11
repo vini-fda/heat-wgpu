@@ -12,3 +12,4 @@ noise = "0.8.2"
 pollster = "0.3.0"
 wgpu = "0.16.0"
 winit = "0.28.6"
+wgpu-profiler = { git = "https://github.com/vini-fda/wgpu-profiler/", branch = "feat-proper-pid-tid" }
