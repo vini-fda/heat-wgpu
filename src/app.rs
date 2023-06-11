@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use log::info;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -73,12 +74,20 @@ impl App {
         // sRGB surfaces, you'll need to account for that when drawing to the frame.
         // IMPROVEMENT TO TUTORIAL: https://sotrh.github.io/learn-wgpu/beginner/tutorial2-surface/#state-new
         // use .is_srgb() instead of .describe().srgb
-        let surface_format = surface_caps
-            .formats
-            .iter()
-            .copied()
-            .find(|f| f.is_srgb())
-            .unwrap_or(surface_caps.formats[0]);
+        let surface_format = match surface_caps.formats.iter().copied().find(|f| f.is_srgb()) {
+            Some(f) => {
+                info!("Using format {:?}", f);
+                f
+            }
+            None => {
+                let fallback_format = surface_caps.formats[0];
+                info!(
+                    "No sRGB format available. Using fallback format {:?}",
+                    fallback_format
+                );
+                fallback_format
+            }
+        };
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
