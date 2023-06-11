@@ -1,7 +1,6 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use log::info;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -26,8 +25,6 @@ struct App {
 impl App {
     // Creating some of the wgpu types requires async code
     async fn new(window: Window) -> Self {
-        let size = window.inner_size();
-
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -39,7 +36,26 @@ impl App {
         //
         // The surface needs to live as long as the window that created it.
         // State owns the window so this should be safe.
-        let surface = unsafe { instance.create_surface(&window) }.unwrap();
+        let (size, surface) = unsafe {
+            let size = window.inner_size();
+
+            #[cfg(any(not(target_arch = "wasm32"), target_os = "emscripten"))]
+            let surface = instance.create_surface(&window).unwrap();
+            #[cfg(all(target_arch = "wasm32", not(target_os = "emscripten")))]
+            let surface = {
+                if let Some(offscreen_canvas_setup) = &offscreen_canvas_setup {
+                    log::info!("Creating surface from OffscreenCanvas");
+                    instance.create_surface_from_offscreen_canvas(
+                        offscreen_canvas_setup.offscreen_canvas.clone(),
+                    )
+                } else {
+                    instance.create_surface(&window)
+                }
+            }
+            .unwrap();
+
+            (size, surface)
+        };
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -68,36 +84,11 @@ impl App {
             )
             .await
             .unwrap();
-        let surface_caps = surface.get_capabilities(&adapter);
-        // Shader code in this tutorial assumes an sRGB surface texture. Using a different
-        // one will result all the colors coming out darker. If you want to support non
-        // sRGB surfaces, you'll need to account for that when drawing to the frame.
-        // IMPROVEMENT TO TUTORIAL: https://sotrh.github.io/learn-wgpu/beginner/tutorial2-surface/#state-new
-        // use .is_srgb() instead of .describe().srgb
-        let surface_format = match surface_caps.formats.iter().copied().find(|f| f.is_srgb()) {
-            Some(f) => {
-                info!("Using format {:?}", f);
-                f
-            }
-            None => {
-                let fallback_format = surface_caps.formats[0];
-                info!(
-                    "No sRGB format available. Using fallback format {:?}",
-                    fallback_format
-                );
-                fallback_format
-            }
-        };
-
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width: size.width,
-            height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
-        };
+        let mut config = surface
+            .get_default_config(&adapter, size.width, size.height)
+            .expect("Surface isn't supported by the adapter.");
+        let surface_view_format = config.format.add_srgb_suffix();
+        config.view_formats.push(surface_view_format);
         surface.configure(&device, &config);
 
         // ------ GPU Compute config ------
@@ -181,10 +172,6 @@ impl App {
         }
     }
 
-    fn input(&mut self, _event: &WindowEvent) -> bool {
-        false
-    }
-
     fn compute_step(&mut self) {
         self.compute.step(&mut self.device, &self.queue);
         self.iteration += 1;
@@ -209,52 +196,61 @@ pub async fn run() {
     env_logger::init();
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
-    let mut state = App::new(window).await;
+    let mut app = App::new(window).await;
 
     event_loop.run(move |event, _, control_flow| {
         match event {
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == state.window().id() => {
-                if !state.input(event) {
-                    match event {
-                        WindowEvent::CloseRequested
-                        | WindowEvent::KeyboardInput {
-                            input:
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                                    ..
-                                },
-                            ..
-                        } => *control_flow = ControlFlow::Exit,
-                        WindowEvent::Resized(physical_size) => {
-                            state.resize(*physical_size);
-                        }
-                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            state.resize(**new_inner_size);
-                        }
-                        _ => {}
-                    }
-                }
+            Event::RedrawEventsCleared => {
+                // TODO: in the wgpu example, an async executor is used for polling
+                // we need to check how to sync the compute step with the render step
+                // spawner.run_until_stalled();
+
+                app.window().request_redraw();
             }
-            Event::RedrawRequested(window_id) if window_id == state.window().id() => {
-                state.compute_step();
-                match state.render() {
+            Event::WindowEvent {
+                event:
+                    WindowEvent::Resized(size)
+                    | WindowEvent::ScaleFactorChanged {
+                        new_inner_size: &mut size,
+                        ..
+                    },
+                ..
+            } => {
+                log::info!("Resizing to {:?}", size);
+                app.config.width = size.width.max(1);
+                app.config.height = size.height.max(1);
+                app.resize(size);
+                app.surface.configure(&app.device, &app.config);
+            }
+            Event::WindowEvent { event, .. } => match event {
+                WindowEvent::KeyboardInput {
+                    input:
+                        KeyboardInput {
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            state: ElementState::Pressed,
+                            ..
+                        },
+                    ..
+                }
+                | WindowEvent::CloseRequested => {
+                    *control_flow = ControlFlow::Exit;
+                }
+                _ => {
+                    // TODO example.update(event);
+                }
+            },
+            Event::RedrawRequested(window_id) if window_id == app.window().id() => {
+                app.compute_step();
+
+                match app.render() {
                     Ok(_) => {}
                     // Reconfigure the surface if lost
-                    Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+                    Err(wgpu::SurfaceError::Lost) => app.resize(app.size),
                     // The system is out of memory, we should probably quit
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     // All other errors (Outdated, Timeout) should be resolved by the next frame
                     Err(e) => eprintln!("{:?}", e),
                 }
-            }
-            Event::MainEventsCleared => {
-                // RedrawRequested will only trigger once, unless we manually
-                // request it.
-                state.window().request_redraw();
             }
             _ => {}
         }
