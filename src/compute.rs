@@ -135,9 +135,9 @@ impl Compute {
         // Resolves any queries that might be in flight.
         profiler.resolve_queries(&mut encoder);
         queue.submit(std::iter::once(encoder.finish()));
-        device.poll(wgpu::MaintainBase::Wait);
         // Signal to the profiler that the frame is finished.
         profiler.end_frame().unwrap();
+        // while !device.poll(wgpu::MaintainBase::Wait) {}
         if let Some(data) = profiler.process_finished_frame() {
             if let Some(profiler_data) = profiler_data {
                 profiler_data.extend(data);
