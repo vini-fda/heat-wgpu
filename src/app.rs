@@ -200,7 +200,6 @@ impl App {
         } else {
             *self.direction.write().unwrap() = Direction::Backward;
         }
-        drop(iteration);
     }
 
     fn render(&self) -> Result<(), wgpu::SurfaceError> {
@@ -223,34 +222,6 @@ pub async fn run() {
     // let mut app = App::new(window).await;
     // create app to be used in two threads
     let app = Arc::new(App::new(window).await);
-
-    // Run GPU compute in a separate thread
-    {
-        use std::thread;
-        use std::time::{Duration, Instant};
-        let target_frame_duration = Duration::from_secs_f64(1.0 / 60.0);
-        let mut previous_frame_time = Instant::now();
-        let app = app.clone();
-        // Spawn a new thread to run at fixed timestep
-        thread::spawn(move || {
-            loop {
-                // Perform your computation here
-                app.compute_step();
-
-                // Calculate the time elapsed since the previous frame
-                let elapsed = previous_frame_time.elapsed();
-                println!("Elapsed: {:?}", elapsed);
-
-                // Check if we need to introduce a delay to maintain 60 Hz
-                if elapsed < target_frame_duration {
-                    thread::sleep(target_frame_duration - elapsed);
-                }
-
-                // Update the previous frame time
-                previous_frame_time = Instant::now();
-            }
-        });
-    }
 
     event_loop.run(move |event, _, control_flow| {
         match event {
@@ -306,8 +277,8 @@ pub async fn run() {
                 }
             },
             Event::RedrawRequested(window_id) if window_id == app.window().id() => {
-                //app.compute_step();
-
+                app.compute_step();
+                
                 match app.render() {
                     Ok(_) => {}
                     // Reconfigure the surface if lost
