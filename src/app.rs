@@ -1,9 +1,3 @@
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::RwLock;
-use wgpu_profiler::GpuProfiler;
-
-use wgpu_profiler::GpuTimerScopeResult;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -16,15 +10,12 @@ struct App {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    config: Mutex<wgpu::SurfaceConfiguration>,
-    size: Mutex<winit::dpi::PhysicalSize<u32>>,
+    config: wgpu::SurfaceConfiguration,
+    size: winit::dpi::PhysicalSize<u32>,
     window: Window,
     compute: Compute,
     renderer: Renderer,
-    profiler: Arc<Mutex<GpuProfiler>>,
-    profiler_data: Arc<Mutex<Option<Vec<GpuTimerScopeResult>>>>,
-    direction: Arc<RwLock<Direction>>,
-    iteration: Arc<RwLock<u32>>,
+    iteration: u32,
 }
 
 impl App {
@@ -75,8 +66,7 @@ impl App {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
-                        | GpuProfiler::ALL_WGPU_TIMER_FEATURES,
+                    features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     limits: if cfg!(target_arch = "wasm32") {
@@ -147,30 +137,19 @@ impl App {
         let txa_view = &texture_a.create_view(&wgpu::TextureViewDescriptor::default());
         let txb_view = &texture_b.create_view(&wgpu::TextureViewDescriptor::default());
 
-        let direction = Arc::new(RwLock::new(Direction::Forward));
-
-        let compute = Compute::new(&device, direction.clone(), texture_size, txa_view, txb_view);
-        let renderer = Renderer::new(&device, direction.clone(), &config, txa_view, txb_view);
-
-        let profiler = Arc::new(Mutex::new(GpuProfiler::new(
-            4,
-            queue.get_timestamp_period(),
-            device.features(),
-        )));
+        let compute = Compute::new(&device, texture_size, txa_view, txb_view);
+        let renderer = Renderer::new(&device, &config, txa_view, txb_view);
 
         Self {
             window,
             surface,
             device,
             queue,
-            config: Mutex::new(config),
-            size: Mutex::new(size),
+            config,
+            size,
             compute,
             renderer,
-            profiler,
-            profiler_data: Arc::new(Mutex::new(None)),
-            direction,
-            iteration: Arc::new(RwLock::new(0)),
+            iteration: 0,
         }
     }
 
@@ -178,40 +157,32 @@ impl App {
         &self.window
     }
 
-    fn resize(&self, new_size: winit::dpi::PhysicalSize<u32>) {
+    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
-            *self.size.lock().unwrap() = new_size;
-            let mut config = self.config.lock().unwrap();
-            config.width = new_size.width;
-            config.height = new_size.height;
-            self.surface.configure(&self.device, &config);
+            self.size = new_size;
+            self.config.width = new_size.width;
+            self.config.height = new_size.height;
+            self.surface.configure(&self.device, &self.config);
         }
     }
 
-    fn compute_step(&self) {
-        let mut profiler = self.profiler.lock().unwrap();
-        let mut profiler_data = self.profiler_data.lock().unwrap();
-        self.compute
-            .step(&self.device, &self.queue, &mut profiler, &mut profiler_data);
-        let mut iteration = self.iteration.write().unwrap();
-        *iteration += 1;
-        if *iteration % 2 == 0 {
-            *self.direction.write().unwrap() = Direction::Forward;
+    fn direction(&self) -> Direction {
+        if self.iteration % 2 == 0 {
+            Direction::Forward
         } else {
-            *self.direction.write().unwrap() = Direction::Backward;
+            Direction::Backward
         }
+    }
+
+    fn compute_step(&mut self) {
+        self.compute
+            .step(&self.device, &self.queue, self.direction());
+        self.iteration += 1;
     }
 
     fn render(&self) -> Result<(), wgpu::SurfaceError> {
-        let mut profiler = self.profiler.lock().unwrap();
-        let mut profiler_data = self.profiler_data.lock().unwrap();
-        self.renderer.render(
-            &self.device,
-            &self.surface,
-            &self.queue,
-            &mut profiler,
-            &mut profiler_data,
-        )
+        self.renderer
+            .render(&self.device, &self.surface, &self.queue, self.direction())
     }
 }
 
@@ -221,7 +192,7 @@ pub async fn run() {
     let window = WindowBuilder::new().build(&event_loop).unwrap();
     // let mut app = App::new(window).await;
     // create app to be used in two threads
-    let app = Arc::new(App::new(window).await);
+    let mut app = App::new(window).await;
 
     event_loop.run(move |event, _, control_flow| {
         match event {
@@ -243,8 +214,7 @@ pub async fn run() {
             } => {
                 log::info!("Resizing to {:?}", size);
                 app.resize(size);
-                app.surface
-                    .configure(&app.device, &app.config.lock().unwrap());
+                app.surface.configure(&app.device, &app.config);
             }
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => {
@@ -258,31 +228,22 @@ pub async fn run() {
                             ..
                         },
                     ..
-                } => match keycode {
-                    VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
-                    VirtualKeyCode::Space => {
-                        let profiler_data = app.profiler_data.lock().unwrap();
-                        if let Some(ref data) = *profiler_data {
-                            wgpu_profiler::chrometrace::write_chrometrace(
-                                std::path::Path::new("trace.json"),
-                                data,
-                            )
-                            .expect("Failed to write trace.json");
-                        }
+                } => {
+                    if keycode == VirtualKeyCode::Escape {
+                        *control_flow = ControlFlow::Exit
                     }
-                    _ => {}
-                },
+                }
                 _ => {
                     // TODO example.update(event);
                 }
             },
             Event::RedrawRequested(window_id) if window_id == app.window().id() => {
                 app.compute_step();
-                
+
                 match app.render() {
                     Ok(_) => {}
                     // Reconfigure the surface if lost
-                    Err(wgpu::SurfaceError::Lost) => app.resize(*app.size.lock().unwrap()),
+                    Err(wgpu::SurfaceError::Lost) => app.resize(app.size),
                     // The system is out of memory, we should probably quit
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     // All other errors (Outdated, Timeout) should be resolved by the next frame

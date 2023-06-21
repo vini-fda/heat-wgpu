@@ -1,6 +1,3 @@
-use std::sync::{Arc, RwLock};
-use wgpu_profiler::{wgpu_profiler, GpuProfiler, GpuTimerScopeResult};
-
 use crate::directional_bind_group::{Direction, DirectionalBindGroup};
 
 pub struct Compute {
@@ -12,7 +9,6 @@ pub struct Compute {
 impl Compute {
     pub fn new(
         device: &wgpu::Device,
-        direction: Arc<RwLock<Direction>>,
         texture_size: wgpu::Extent3d,
         texture_a: &wgpu::TextureView,
         texture_b: &wgpu::TextureView,
@@ -102,7 +98,6 @@ impl Compute {
             });
         Self {
             bind_group: DirectionalBindGroup::new(
-                direction,
                 compute_texture_bind_group_forward,
                 compute_texture_bind_group_backward,
             ),
@@ -110,41 +105,23 @@ impl Compute {
             texture_size,
         }
     }
-    pub fn step(
-        &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        profiler: &mut GpuProfiler,
-        profiler_data: &mut Option<Vec<GpuTimerScopeResult>>,
-    ) {
+    pub fn step(&self, device: &wgpu::Device, queue: &wgpu::Queue, direction: Direction) {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Command Encoder for GPU compute"),
         });
-        wgpu_profiler!("GPU compute", profiler, &mut encoder, device, {
-            let (dispatch_width, dispatch_height) = compute_work_group_count(
-                (self.texture_size.width, self.texture_size.height),
-                (16, 16),
-            );
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Heat pass"),
-            });
-            compute_pass.set_pipeline(&self.pipeline);
-            compute_pass.set_bind_group(0, self.bind_group.get(), &[]);
-            compute_pass.dispatch_workgroups(dispatch_width, dispatch_height, 1);
+        let (dispatch_width, dispatch_height) = compute_work_group_count(
+            (self.texture_size.width, self.texture_size.height),
+            (16, 16),
+        );
+        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Heat pass"),
         });
+        compute_pass.set_pipeline(&self.pipeline);
+        compute_pass.set_bind_group(0, self.bind_group.get(direction), &[]);
+        compute_pass.dispatch_workgroups(dispatch_width, dispatch_height, 1);
+        drop(compute_pass);
         // Resolves any queries that might be in flight.
-        profiler.resolve_queries(&mut encoder);
         queue.submit(std::iter::once(encoder.finish()));
-        // Signal to the profiler that the frame is finished.
-        profiler.end_frame().unwrap();
-        // while !device.poll(wgpu::MaintainBase::Wait) {}
-        if let Some(data) = profiler.process_finished_frame() {
-            if let Some(profiler_data) = profiler_data {
-                profiler_data.extend(data);
-            } else {
-                *profiler_data = Some(data);
-            }
-        }
     }
 }
 

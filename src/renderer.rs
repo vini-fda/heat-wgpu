@@ -1,9 +1,6 @@
-use std::sync::{Arc, RwLock};
-
 use crate::directional_bind_group::{Direction, DirectionalBindGroup};
 use crate::vertex::Vertex;
 use wgpu::util::DeviceExt;
-use wgpu_profiler::{wgpu_profiler, GpuProfiler, GpuTimerScopeResult};
 
 const VERTICES: &[Vertex] = &[
     crate::vertex!([-1.0, 1.0, 0.0], [0.0, 0.0]), // top left
@@ -25,7 +22,6 @@ pub struct Renderer {
 impl Renderer {
     pub fn new(
         device: &wgpu::Device,
-        direction: Arc<RwLock<Direction>>,
         config: &wgpu::SurfaceConfiguration,
         texture_a: &wgpu::TextureView,
         texture_b: &wgpu::TextureView,
@@ -161,7 +157,6 @@ impl Renderer {
         let num_indices = INDICES.len() as u32;
         Self {
             bind_group: DirectionalBindGroup::new(
-                direction,
                 render_texture_bind_group_forward,
                 render_texture_bind_group_backward,
             ),
@@ -176,8 +171,7 @@ impl Renderer {
         device: &wgpu::Device,
         surface: &wgpu::Surface,
         queue: &wgpu::Queue,
-        profiler: &mut GpuProfiler,
-        profiler_data: &mut Option<Vec<GpuTimerScopeResult>>,
+        direction: Direction,
     ) -> Result<(), wgpu::SurfaceError> {
         let output = surface.get_current_texture()?;
         let view = output
@@ -186,40 +180,27 @@ impl Renderer {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
-        wgpu_profiler!("rendering", profiler, &mut encoder, device, {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-            render_pass.set_pipeline(&self.pipeline);
-            render_pass.set_bind_group(0, self.bind_group.get(), &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: true,
+                },
+            })],
+            depth_stencil_attachment: None,
         });
-        profiler.resolve_queries(&mut encoder);
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, self.bind_group.get(direction), &[]);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+        drop(render_pass);
+
         queue.submit(std::iter::once(encoder.finish()));
         output.present();
-
-        // Signal to the profiler that the frame is finished.
-        profiler.end_frame().unwrap();
-
-        profiler.process_finished_frame();
-        if let Some(data) = profiler.process_finished_frame() {
-            if let Some(profiler_data) = profiler_data {
-                profiler_data.extend(data);
-            } else {
-                *profiler_data = Some(data);
-            }
-        }
 
         Ok(())
     }
