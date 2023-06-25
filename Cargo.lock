@@ -669,7 +669,6 @@ dependencies = [
  "noise",
  "pollster",
  "wgpu",
- "wgpu-profiler",
  "winit",
 ]
 
@@ -1959,14 +1958,6 @@ dependencies = [
  "web-sys",
  "wgpu-types",
  "winapi",
-]
-
-[[package]]
-name = "wgpu-profiler"
-version = "0.12.1"
-source = "git+https://github.com/vini-fda/wgpu-profiler/?branch=feat-proper-pid-tid#d396085b1b6a3bed8f71bf2fdb188e8b776faedb"
-dependencies = [
- "wgpu",
 ]
 
 [[package]]
