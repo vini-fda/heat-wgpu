@@ -4,7 +4,7 @@ $$ \frac{\partial u}{\partial t} = \alpha \left( \frac{\partial^2 u}{\partial x^
 
 ## Crank-Nicolson
 
-$$ \frac{U_{i,j}^{n+1} - U_{i,j}^{n}}{\Delta t} = \frac{\alpha}{2} \left(\frac{U_{i+1,j}^{n+1} - 2 U_{i,j}^{n+1} + U_{i-1,j}^{n+1}}{\Delta x^2} + \frac{U_{i,j+1}^{n+1} - 2 U_{i,j}^{n+1} + U_{i,j-1}^{n+1}}{\Delta y^2} \right) + \frac{1}{2} \left(\frac{U_{i+1,j}^{n} - 2 U_{i,j}^{n} + U_{i-1,j}^{n}}{\Delta x^2} + \frac{U_{i,j+1}^{n} - 2 U_{i,j}^{n} + U_{i,j-1}^{n}}{\Delta y^2} \right)$$
+$$ \frac{U_{i,j}^{n+1} - U_{i,j}^{n}}{\Delta t} = \frac{\alpha}{2} \left(\frac{U_{i+1,j}^{n+1} - 2 U_{i,j}^{n+1} + U_{i-1,j}^{n+1}}{\Delta x^2} + \frac{U_{i,j+1}^{n+1} - 2 U_{i,j}^{n+1} + U_{i,j-1}^{n+1}}{\Delta y^2} \right) + \frac{\alpha}{2} \left(\frac{U_{i+1,j}^{n} - 2 U_{i,j}^{n} + U_{i-1,j}^{n}}{\Delta x^2} + \frac{U_{i,j+1}^{n} - 2 U_{i,j}^{n} + U_{i,j-1}^{n}}{\Delta y^2} \right)$$
 
 With $\Delta x = \Delta y = h$ and $\Delta t = k$:
 
