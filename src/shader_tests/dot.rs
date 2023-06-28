@@ -2,9 +2,7 @@
 mod tests {
     use wgpu::util::DeviceExt;
 
-
-
-    async fn execute_gpu(vec_a: &[f32], vec_b: &[f32]) -> Option<Vec<u32>> {
+    async fn execute_gpu(vec_a: &[f32], vec_b: &[f32]) -> Option<Vec<f32>> {
         // Instantiates instance of WebGPU
         let instance = wgpu::Instance::default();
 
@@ -36,20 +34,20 @@ mod tests {
         execute_gpu_inner(&device, &queue, vec_a, vec_b).await
     }
 
-
     async fn execute_gpu_inner(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        numbers: &[u32],
-    ) -> Option<Vec<u32>> {
+        vec_a: &[f32],
+        vec_b: &[f32],
+    ) -> Option<Vec<f32>> {
         // Loads the shader from WGSL
         let cs_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/dot.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/vec_mul.wgsl").into()),
         });
 
         // Gets the size in bytes of the buffer.
-        let slice_size = numbers.len() * std::mem::size_of::<u32>();
+        let slice_size = vec_a.len() * std::mem::size_of::<u32>();
         let size = slice_size as wgpu::BufferAddress;
 
         // Instantiates buffer without data.
@@ -63,17 +61,29 @@ mod tests {
             mapped_at_creation: false,
         });
 
-        // Instantiates buffer with data (`numbers`).
+        // Instantiates buffer with data (`vec_a`).
         // Usage allowing the buffer to be:
         //   A storage buffer (can be bound within a bind group and thus available to a shader).
         //   The destination of a copy.
         //   The source of a copy.
-        let storage_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Storage Buffer"),
-            contents: bytemuck::cast_slice(numbers),
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::COPY_SRC,
+        let storage_buffer_a = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Storage Buffer A"),
+            contents: bytemuck::cast_slice(vec_a),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+
+        let storage_buffer_b = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Storage Buffer B"),
+            contents: bytemuck::cast_slice(vec_b),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+
+        // Stores the result of the computation
+        let storage_buffer_c = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Storage Buffer C"),
+            size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
         });
 
         // A bind group defines how buffers are accessed by shaders.
@@ -95,10 +105,20 @@ mod tests {
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: storage_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: storage_buffer_a.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: storage_buffer_b.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: storage_buffer_c.as_entire_binding(),
+                },
+            ],
         });
 
         // A command encoder executes one or many pipelines.
@@ -106,15 +126,16 @@ mod tests {
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
-            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            let mut cpass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
             cpass.set_pipeline(&compute_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
-            cpass.insert_debug_marker("compute collatz iterations");
-            cpass.dispatch_workgroups(numbers.len() as u32, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
+            cpass.insert_debug_marker("compute vector element-wise multiplication");
+            cpass.dispatch_workgroups(vec_a.len() as u32, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
         }
         // Sets adds copy operation to command encoder.
         // Will copy data from storage buffer on GPU to staging buffer on CPU.
-        encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, size);
+        encoder.copy_buffer_to_buffer(&storage_buffer_c, 0, &staging_buffer, 0, size);
 
         // Submits command encoder for processing
         queue.submit(Some(encoder.finish()));
@@ -153,13 +174,25 @@ mod tests {
         }
     }
 
-    fn simple_dot_product() {
-        // 128x128 textures A, B initialized both all with 1.0
-        // compute shader should compute dot product of A and B
-        // and write result to a f32 binding
-        // result should be 128*128*1.0 = 16384.0
+    #[test]
+    fn elementwise_multiplication() {
+        let vec_a = vec![2.0; 128 * 128];
+        let vec_b = vec![3.0; 128 * 128];
+        let result;
 
-        // create device, queue, and compute shader
-        todo!()
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            env_logger::init();
+            result = pollster::block_on(async { execute_gpu(&vec_a, &vec_b).await.unwrap() });
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+            console_log::init().expect("could not initialize logger");
+            result = wasm_bindgen_futures::spawn_local(async {
+                execute_gpu(&vec_a, &vec_b).await.unwrap()
+            });
+        }
+        assert!(result == vec![6.0; 128 * 128]);
     }
 }
