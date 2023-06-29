@@ -38,7 +38,7 @@ mod tests {
     async fn execute_gpu_inner(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        vec_in: &[f32]
+        vec_in: &[f32],
     ) -> Option<Vec<f32>> {
         const WORKGROUP_SIZE: u32 = 256;
         let shader_input = include_str!("../shaders/sum_reduce.wgsl");
@@ -125,7 +125,8 @@ mod tests {
             cpass.set_pipeline(&compute_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
             cpass.insert_debug_marker("compute vector element-wise multiplication");
-            cpass.dispatch_workgroups(vec_in.len() as u32 / WORKGROUP_SIZE, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
+            cpass.dispatch_workgroups(vec_in.len() as u32 / WORKGROUP_SIZE, 1, 1);
+            // Number of cells to run, the (x,y,z) size of item being processed
         }
         // Sets adds copy operation to command encoder.
         // Will copy data from storage buffer on GPU to staging buffer on CPU.
@@ -169,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn elementwise_multiplication() {
+    fn sum_reduce() {
         let vec_in = vec![2.0; 128 * 128];
         let result;
 

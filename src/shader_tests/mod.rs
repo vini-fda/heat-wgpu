@@ -1,2 +1,2 @@
-mod vec_mul;
 mod sum_reduce;
+mod vec_mul;
