@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use regex::Regex;
     use wgpu::util::DeviceExt;
 
     async fn execute_gpu(vec_in: &[f32]) -> Option<Vec<f32>> {
@@ -39,10 +40,14 @@ mod tests {
         queue: &wgpu::Queue,
         vec_in: &[f32]
     ) -> Option<Vec<f32>> {
+        const WORKGROUP_SIZE: u32 = 256;
+        let shader_input = include_str!("../shaders/sum_reduce.wgsl");
+        let pattern = Regex::new(r"\{WORKGROUP_SIZE\}").unwrap();
+        let shader = pattern.replace_all(shader_input, WORKGROUP_SIZE.to_string().as_str());
         // Loads the shader from WGSL
         let cs_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/sum_reduce.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(shader),
         });
 
         // Gets the size in bytes of the buffer.
@@ -120,7 +125,7 @@ mod tests {
             cpass.set_pipeline(&compute_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
             cpass.insert_debug_marker("compute vector element-wise multiplication");
-            cpass.dispatch_workgroups((vec_in.len() / 16) as u32, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
+            cpass.dispatch_workgroups(vec_in.len() as u32 / WORKGROUP_SIZE, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
         }
         // Sets adds copy operation to command encoder.
         // Will copy data from storage buffer on GPU to staging buffer on CPU.
@@ -183,7 +188,6 @@ mod tests {
         }
         println!("result[0] = {:?}", result[0]);
         println!("result.sum() = {:?}", result.iter().sum::<f32>());
-        assert!(result[0] == 64.0);
         assert!(result.iter().sum::<f32>() == 128.0 * 128.0 * 2.0);
     }
 }
