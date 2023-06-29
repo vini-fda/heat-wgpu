@@ -3,7 +3,7 @@ mod tests {
     use regex::Regex;
     use wgpu::util::DeviceExt;
 
-    async fn execute_gpu(vec_in: &[f32]) -> Option<Vec<f32>> {
+    async fn execute_gpu(vec_in: &[f32]) -> Option<(Vec<f32>, Vec<f32>)> {
         // Instantiates instance of WebGPU
         let instance = wgpu::Instance::default();
 
@@ -39,15 +39,35 @@ mod tests {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         vec_in: &[f32],
-    ) -> Option<Vec<f32>> {
+    ) -> Option<(Vec<f32>, Vec<f32>)> {
         const WORKGROUP_SIZE: u32 = 256;
-        let shader_input = include_str!("../shaders/sum_reduce.wgsl");
+        let work_size = vec_in.len() as u32;
+        let shader_input_1 = include_str!("../shaders/sum_reduce.wgsl");
         let pattern = Regex::new(r"\{WORKGROUP_SIZE\}").unwrap();
-        let shader = pattern.replace_all(shader_input, WORKGROUP_SIZE.to_string().as_str());
+        let shader_1 = pattern.replace_all(shader_input_1, WORKGROUP_SIZE.to_string().as_str());
+
+        let shader_input_2 = include_str!("../shaders/sum_reduce_final.wgsl");
+        let patterns = vec![(
+            Regex::new(r"\{NUM_GROUPS\}").unwrap(),
+            work_size / WORKGROUP_SIZE,
+        )];
+        let shader_2 =
+            patterns
+                .iter()
+                .fold(shader_input_2.to_string(), |acc, (pattern, replacement)| {
+                    pattern
+                        .replace_all(&acc, replacement.to_string())
+                        .to_string()
+                });
         // Loads the shader from WGSL
-        let cs_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        let cs_module_1 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Wgsl(shader),
+            source: wgpu::ShaderSource::Wgsl(shader_1),
+        });
+
+        let cs_module_2 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(shader_2.into()),
         });
 
         // Gets the size in bytes of the buffer.
@@ -58,7 +78,13 @@ mod tests {
         // `usage` of buffer specifies how it can be used:
         //   `BufferUsages::MAP_READ` allows it to be read (outside the shader).
         //   `BufferUsages::COPY_DST` allows it to be the destination of the copy.
-        let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let staging_buffer_1 = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let staging_buffer_2 = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
@@ -76,9 +102,17 @@ mod tests {
             usage: wgpu::BufferUsages::STORAGE,
         });
 
-        // Stores the result of the computation
+        // Stores the intermediate result of the computation
         let storage_buffer_b = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Storage Buffer for Output"),
+            label: Some("Storage Buffer for intermediate output"),
+            size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        // Stores the result of the computation
+        let storage_buffer_c = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Storage Buffer for output"),
             size,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
@@ -91,18 +125,25 @@ mod tests {
         // A pipeline specifies the operation of a shader
 
         // Instantiates the pipeline.
-        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        let compute_pipeline_1 = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: None,
             layout: None,
-            module: &cs_module,
+            module: &cs_module_1,
+            entry_point: "main",
+        });
+
+        let compute_pipeline_2 = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: None,
+            layout: None,
+            module: &cs_module_2,
             entry_point: "main",
         });
 
         // Instantiates the bind group, once again specifying the binding of buffers.
-        let bind_group_layout = compute_pipeline.get_bind_group_layout(0);
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group_layout_1 = compute_pipeline_1.get_bind_group_layout(0);
+        let bind_group_1 = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &bind_group_layout,
+            layout: &bind_group_layout_1,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -115,6 +156,22 @@ mod tests {
             ],
         });
 
+        let bind_group_layout_2 = compute_pipeline_2.get_bind_group_layout(0);
+        let bind_group_2 = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bind_group_layout_2,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: storage_buffer_b.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: storage_buffer_c.as_entire_binding(),
+                },
+            ],
+        });
+
         // A command encoder executes one or many pipelines.
         // It is to WebGPU what a command buffer is to Vulkan.
         let mut encoder =
@@ -122,21 +179,30 @@ mod tests {
         {
             let mut cpass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-            cpass.set_pipeline(&compute_pipeline);
-            cpass.set_bind_group(0, &bind_group, &[]);
-            cpass.insert_debug_marker("compute vector element-wise multiplication");
-            cpass.dispatch_workgroups(vec_in.len() as u32 / WORKGROUP_SIZE, 1, 1);
-            // Number of cells to run, the (x,y,z) size of item being processed
+            cpass.set_pipeline(&compute_pipeline_1);
+            cpass.set_bind_group(0, &bind_group_1, &[]);
+            cpass.insert_debug_marker("compute vector block sum");
+            cpass.dispatch_workgroups(work_size / WORKGROUP_SIZE, 1, 1);
+            cpass.set_pipeline(&compute_pipeline_2);
+            cpass.set_bind_group(0, &bind_group_2, &[]);
+            cpass.insert_debug_marker("compute vector final sum");
+            cpass.dispatch_workgroups(work_size, 1, 1);
         }
         // Sets adds copy operation to command encoder.
         // Will copy data from storage buffer on GPU to staging buffer on CPU.
-        encoder.copy_buffer_to_buffer(&storage_buffer_b, 0, &staging_buffer, 0, size);
-
+        encoder.copy_buffer_to_buffer(&storage_buffer_b, 0, &staging_buffer_1, 0, size);
+        encoder.copy_buffer_to_buffer(&storage_buffer_c, 0, &staging_buffer_2, 0, size);
         // Submits command encoder for processing
         queue.submit(Some(encoder.finish()));
 
+        let result_1 = load_from_buffer(device, &staging_buffer_1).await;
+        let result_2 = load_from_buffer(device, &staging_buffer_2).await;
+        Some((result_1, result_2))
+    }
+
+    async fn load_from_buffer(device: &wgpu::Device, buffer: &wgpu::Buffer) -> Vec<f32> {
         // Note that we're not calling `.await` here.
-        let buffer_slice = staging_buffer.slice(..);
+        let buffer_slice = buffer.slice(..);
         // Sets the buffer up for mapping, sending over the result of the mapping back to us when it is finished.
         let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
@@ -156,14 +222,14 @@ mod tests {
             // With the current interface, we have to make sure all mapped views are
             // dropped before we unmap the buffer.
             drop(data);
-            staging_buffer.unmap(); // Unmaps buffer from memory
-                                    // If you are familiar with C++ these 2 lines can be thought of similarly to:
-                                    //   delete myPointer;
-                                    //   myPointer = NULL;
-                                    // It effectively frees the memory
+            buffer.unmap(); // Unmaps buffer from memory
+                            // If you are familiar with C++ these 2 lines can be thought of similarly to:
+                            //   delete myPointer;
+                            //   myPointer = NULL;
+                            // It effectively frees the memory
 
             // Returns data from buffer
-            Some(result)
+            result
         } else {
             panic!("failed to run dot product compute on gpu!")
         }
@@ -172,23 +238,27 @@ mod tests {
     #[test]
     fn sum_reduce() {
         let vec_in = vec![2.0; 128 * 128];
-        let result;
+        let result_1;
+        let result_2;
 
         #[cfg(not(target_arch = "wasm32"))]
         {
             env_logger::init();
-            result = pollster::block_on(async { execute_gpu(&vec_in).await.unwrap() });
+            (result_1, result_2) =
+                pollster::block_on(async { execute_gpu(&vec_in).await.unwrap() });
         }
         #[cfg(target_arch = "wasm32")]
         {
             std::panic::set_hook(Box::new(console_error_panic_hook::hook));
             console_log::init().expect("could not initialize logger");
-            result = wasm_bindgen_futures::spawn_local(async {
+            (result_1, result_2) = wasm_bindgen_futures::spawn_local(async {
                 execute_gpu(&vec_a, &vec_b).await.unwrap()
             });
         }
-        println!("result[0] = {:?}", result[0]);
-        println!("result.sum() = {:?}", result.iter().sum::<f32>());
-        assert!(result.iter().sum::<f32>() == 128.0 * 128.0 * 2.0);
+        println!("result1[0] = {:?}", result_1[0]);
+        println!("result1.sum() = {:?}", result_1.iter().sum::<f32>());
+        assert!(result_1.iter().sum::<f32>() == 128.0 * 128.0 * 2.0);
+        println!("result2[0] = {:?}", result_2[0]);
+        assert!(result_2[0] == 128.0 * 128.0 * 2.0);
     }
 }
