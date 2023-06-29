@@ -9,13 +9,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>, @builtin(local_invo
     // and stores the result in the first element of the output array
 
     let tid = local_id.x;
-    let i = global_id.x;
+    let i = global_id.x + group_id.x * 16u;
 
-    if (i < arrayLength(&input)) {
-        sdata[tid] = input[i];
-    } else {
-        sdata[tid] = 0.0;
-    }
+    sdata[tid] = input[i] + input[i + 16u];
 
     workgroupBarrier();
 

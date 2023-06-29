@@ -120,7 +120,7 @@ mod tests {
             cpass.set_pipeline(&compute_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
             cpass.insert_debug_marker("compute vector element-wise multiplication");
-            cpass.dispatch_workgroups(vec_in.len() as u32, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
+            cpass.dispatch_workgroups((vec_in.len() / 16) as u32, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
         }
         // Sets adds copy operation to command encoder.
         // Will copy data from storage buffer on GPU to staging buffer on CPU.
@@ -182,6 +182,8 @@ mod tests {
             });
         }
         println!("result[0] = {:?}", result[0]);
-        assert!(result[0] == 16.0);
+        println!("result.sum() = {:?}", result.iter().sum::<f32>());
+        assert!(result[0] == 64.0);
+        assert!(result.iter().sum::<f32>() == 128.0 * 128.0 * 2.0);
     }
 }
