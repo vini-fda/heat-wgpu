@@ -6,7 +6,7 @@ var<workgroup> sdata: array<f32, 16>;
 @compute @workgroup_size(16)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>, @builtin(local_invocation_id) local_id: vec3<u32>, @builtin(workgroup_id) group_id: vec3<u32>) {
     // does a parallel sum reduction of the input array
-    // and stores the result in the first element of the output array
+    // and stores the block results in the output array
 
     let tid = local_id.x;
     let i = global_id.x + group_id.x * 16u;
