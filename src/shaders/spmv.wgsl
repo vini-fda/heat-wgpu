@@ -4,11 +4,11 @@
 
 // Diagonal representation of a matrix A
 struct DIAMatrix {
-    data: array<f32>;
-    offsets: array<i32>;
-    num_cols: u32;
-    num_rows: u32;
-    num_diags: u32; 
+    data: array<f32>,
+    offsets: array<i32>,
+    num_cols: u32,
+    num_rows: u32,
+    num_diags: u32,
 }
 
 @compute @workgroup_size(16)
