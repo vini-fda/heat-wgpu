@@ -3,7 +3,7 @@ mod tests {
     use regex::Regex;
     use wgpu::util::DeviceExt;
 
-    async fn execute_gpu(vec_in: &[f32]) -> Option<(Vec<f32>, Vec<f32>)> {
+    async fn execute_gpu(vec_in: &[f32]) -> Option<(Vec<f32>, f32)> {
         // Instantiates instance of WebGPU
         let instance = wgpu::Instance::default();
 
@@ -39,7 +39,7 @@ mod tests {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         vec_in: &[f32],
-    ) -> Option<(Vec<f32>, Vec<f32>)> {
+    ) -> Option<(Vec<f32>, f32)> {
         const WORKGROUP_SIZE: u32 = 256;
         let work_size = vec_in.len() as u32;
         let shader_input_1 = include_str!("../shaders/sum_reduce.wgsl");
@@ -86,7 +86,7 @@ mod tests {
         });
         let staging_buffer_2 = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size,
+            size: std::mem::size_of::<f32>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -113,7 +113,7 @@ mod tests {
         // Stores the result of the computation
         let storage_buffer_c = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Storage Buffer for output"),
-            size,
+            size: std::mem::size_of::<f32>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
@@ -191,12 +191,32 @@ mod tests {
         // Sets adds copy operation to command encoder.
         // Will copy data from storage buffer on GPU to staging buffer on CPU.
         encoder.copy_buffer_to_buffer(&storage_buffer_b, 0, &staging_buffer_1, 0, size);
-        encoder.copy_buffer_to_buffer(&storage_buffer_c, 0, &staging_buffer_2, 0, size);
+        encoder.copy_buffer_to_buffer(
+            &storage_buffer_c,
+            0,
+            &staging_buffer_2,
+            0,
+            std::mem::size_of::<f32>() as wgpu::BufferAddress,
+        );
         // Submits command encoder for processing
         queue.submit(Some(encoder.finish()));
 
         let result_1 = load_from_buffer(device, &staging_buffer_1).await;
-        let result_2 = load_from_buffer(device, &staging_buffer_2).await;
+        let result_2: f32;
+        let buffer_slice = staging_buffer_2.slice(..);
+        let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
+        device.poll(wgpu::Maintain::Wait);
+        if let Some(Ok(())) = receiver.receive().await {
+            // Gets contents of buffer
+            let data = buffer_slice.get_mapped_range();
+            // Since contents are got in bytes, this converts these bytes back to u32
+            let r: &[f32] = bytemuck::cast_slice(&data);
+            result_2 = r[0];
+            drop(data);
+        } else {
+            panic!("failed to receive buffer");
+        }
         Some((result_1, result_2))
     }
 
@@ -244,7 +264,7 @@ mod tests {
         println!("result1[0] = {:?}", result_1[0]);
         println!("result1.sum() = {:?}", result_1.iter().sum::<f32>());
         assert!(result_1.iter().sum::<f32>() == 128.0 * 128.0 * 2.0);
-        println!("result2[0] = {:?}", result_2[0]);
-        assert!(result_2[0] == 128.0 * 128.0 * 2.0);
+        println!("result2 = {:?}", result_2);
+        assert!(result_2 == 128.0 * 128.0 * 2.0);
     }
 }
