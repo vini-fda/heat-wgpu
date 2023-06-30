@@ -240,6 +240,7 @@ mod tests {
                 execute_gpu(&x, &params, &data, &offsets).await.unwrap()
             });
         }
-        println!("{:?}", result);
+        let expected = vec![6.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 6.0];
+        assert_eq!(result, expected);
     }
 }
