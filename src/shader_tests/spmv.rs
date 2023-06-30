@@ -1,10 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use bytemuck::Zeroable;
-    use regex::Regex;
     use wgpu::util::DeviceExt;
 
-    #[derive(Zeroable, Clone, Copy)]
     #[repr(C)]
     struct DIAMatrixParams {
         num_cols: u32,
@@ -57,14 +54,10 @@ mod tests {
         data: &[f32],
         offsets: &[i32],
     ) -> Option<Vec<f32>> {
-        let shader_input = include_str!("../shaders/spmv.wgsl");
-        let pattern = Regex::new(r"\{NUM_OFFSETS\}").unwrap();
-        let shader = pattern.replace_all(shader_input, 3.to_string().as_str());
-
         // Loads the shader from WGSL
         let cs_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Wgsl(shader),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/spmv.wgsl").into()),
         });
 
         // Gets the size in bytes of the buffer.
