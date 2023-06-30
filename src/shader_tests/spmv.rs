@@ -248,6 +248,5 @@ mod tests {
             });
         }
         println!("{:?}", result);
-        //assert!(result == vec![6.0; 128 * 128]);
     }
 }
