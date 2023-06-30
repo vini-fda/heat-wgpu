@@ -178,21 +178,8 @@ mod tests {
     fn elementwise_multiplication() {
         let vec_a = vec![2.0; 128 * 128];
         let vec_b = vec![3.0; 128 * 128];
-        let result;
+        let result = pollster::block_on(async { execute_gpu(&vec_a, &vec_b).await.unwrap() });
 
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            env_logger::init();
-            result = pollster::block_on(async { execute_gpu(&vec_a, &vec_b).await.unwrap() });
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-            console_log::init().expect("could not initialize logger");
-            result = wasm_bindgen_futures::spawn_local(async {
-                execute_gpu(&vec_a, &vec_b).await.unwrap()
-            });
-        }
         assert!(result == vec![6.0; 128 * 128]);
     }
 }

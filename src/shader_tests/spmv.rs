@@ -223,24 +223,12 @@ mod tests {
             2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0,
         ];
         let offsets = vec![-1, 0, 1];
-        let result;
-
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            env_logger::init();
-            result = pollster::block_on(async {
-                execute_gpu(&x, &params, &data, &offsets).await.unwrap()
-            });
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-            console_log::init().expect("could not initialize logger");
-            result = wasm_bindgen_futures::spawn_local(async {
-                execute_gpu(&x, &params, &data, &offsets).await.unwrap()
-            });
-        }
-        let expected = vec![6.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 6.0];
+        let result =
+            pollster::block_on(async { execute_gpu(&x, &params, &data, &offsets).await.unwrap() });
+        let expected = vec![
+            6.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+            10.0, 6.0,
+        ];
         assert_eq!(result, expected);
     }
 }

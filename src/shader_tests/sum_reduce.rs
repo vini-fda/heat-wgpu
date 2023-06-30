@@ -238,23 +238,9 @@ mod tests {
     #[test]
     fn sum_reduce() {
         let vec_in = vec![2.0; 128 * 128];
-        let result_1;
-        let result_2;
+        let (result_1, result_2) =
+            pollster::block_on(async { execute_gpu(&vec_in).await.unwrap() });
 
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            env_logger::init();
-            (result_1, result_2) =
-                pollster::block_on(async { execute_gpu(&vec_in).await.unwrap() });
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-            console_log::init().expect("could not initialize logger");
-            (result_1, result_2) = wasm_bindgen_futures::spawn_local(async {
-                execute_gpu(&vec_a, &vec_b).await.unwrap()
-            });
-        }
         println!("result1[0] = {:?}", result_1[0]);
         println!("result1.sum() = {:?}", result_1.iter().sum::<f32>());
         assert!(result_1.iter().sum::<f32>() == 128.0 * 128.0 * 2.0);
