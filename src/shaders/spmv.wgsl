@@ -1,6 +1,6 @@
-@group(0) @binding(0) var input_vec: texture_storage_2d<r32float, read>;
-@group(0) @binding(1) var input_matrix: DIAMatrix;
-@group(0) @binding(2) var output_vec: texture_storage_2d<r32float, write>;
+@group(0) @binding(0) var<storage, read> input_vec: array<f32>;
+@group(0) @binding(1) var<storage, read> input_matrix: DIAMatrix;
+@group(0) @binding(2) var<storage, write> output_vec: array<f32>;
 
 // Diagonal representation of a matrix A
 struct DIAMatrix {
@@ -13,21 +13,16 @@ struct DIAMatrix {
 
 @compute @workgroup_size(16)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    // the dimensions of input_vec must match the dimensions of output_vec
-    let dimensions: vec2<u32> = textureDimensions(input_vec);
-    let coords = vec2<i32>(global_id.xy);
-    
-    u32 row = coords.x + coords.y * dimensions.x;
-    if (row < num_rows){
-        f32 dot = 0;
-        for (u32 n = 0; n < num_diags; n++) {
-            u32 col = row + offsets[n];
-            f32 val = data [num_rows * n + row];
-            if (col >= 0 && col < num_cols) {
-                let p = vec2<i32>(col % dimensions.x, col / dimensions.x);
-                dot += val * textureLoad(input_vec, p);
+    var row = global_id.x;
+    if (row < input_matrix.num_rows) {
+        var dot: f32 = 0.0;
+        for (var n = 0u; n < input_matrix.num_diags; n++) {
+            let col = row + offsets[n];
+            let val = input_matrix.data[input_matrix.num_rows * n + row];
+            if (col >= 0 && col < input_matrix.num_cols) {
+                dot += val * input_vec[col];
             }
         }
-        textureStore(output_vec, coords, dot);
+        output_vec[row] = dot;
     }
 }
