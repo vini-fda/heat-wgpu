@@ -10,11 +10,12 @@ impl DotKernel {
     pub fn new(
         device: &wgpu::Device,
         x: &wgpu::Buffer,
+        y: &wgpu::Buffer,
         tmp0: &wgpu::Buffer,
         tmp1: &wgpu::Buffer,
         output: &wgpu::Buffer,
     ) -> Self {
-        // First stage of iteration: tmp = x .* x
+        // First stage of iteration: tmp = x .* y
         let vec_mul_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Element-wise vector multiplication shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/vec_mul.wgsl").into()),
@@ -67,7 +68,7 @@ impl DotKernel {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: x.as_entire_binding(),
+                    resource: y.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
