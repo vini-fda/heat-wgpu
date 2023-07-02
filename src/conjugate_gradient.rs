@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{
     dia_matrix::DIAMatrixDescriptor,
     kernels::{
@@ -14,7 +16,7 @@ use crate::{
 ///
 /// This uses the CG method to solve the system of linear equations Ax = b where A is a sparse matrix.
 pub struct CG {
-    buffers: Box<CGBuffers>,
+    buffers: Rc<CGBuffers>,
     init_stages: Vec<Box<dyn Kernel>>,
     stages: Vec<Box<dyn Kernel>>,
     max_steps: usize,
@@ -23,15 +25,15 @@ pub struct CG {
 impl CG {
     pub fn new(
         device: &wgpu::Device,
-        buffers: &CGBuffers,
+        buffers: Rc<CGBuffers>,
         a: &DIAMatrixDescriptor, // Sparse matrix A
         b: &wgpu::Buffer,        // Vector b
         x: &wgpu::Buffer,        // Vector x initialized with initial guess x_0
     ) -> Self {
         Self {
-            buffers: Box::new(*buffers.clone()),
-            init_stages: Self::init_stages(device, buffers, a, b, x),
-            stages: Self::stages(device, buffers, a, x),
+            buffers: buffers.clone(),
+            init_stages: Self::init_stages(device, buffers.as_ref(), a, b, x),
+            stages: Self::stages(device, buffers.as_ref(), a, x),
             max_steps: 100,
         }
     }
@@ -43,15 +45,7 @@ impl CG {
         b: &wgpu::Buffer,
         x: &wgpu::Buffer,
     ) -> Vec<Box<dyn Kernel>> {
-        let CGBuffers {
-            r,
-            p,
-            q,
-            sigma,
-            sigma_prime,
-            tmp0,
-            tmp1,
-        } = buffers;
+        let CGBuffers { r, .. } = buffers;
         // Initialize r = b - A * x
         let r_init0 = SpMVKernel::new(device, a, x, r);
         let r_init1 = SAXPYUpdateKernel::new(device, b, r);
@@ -109,22 +103,14 @@ impl CG {
     }
 
     pub fn run(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        let CGBuffers {
-            r,
-            p,
-            q,
-            sigma,
-            sigma_prime,
-            tmp0,
-            tmp1,
-        } = *self.buffers;
+        let CGBuffers { r, p, .. } = self.buffers.as_ref();
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("CG - initialization"),
         });
         // Initialize r = b - A * x
         let cdescriptor = wgpu::ComputePassDescriptor { label: None };
         let mut compute_pass = encoder.begin_compute_pass(&cdescriptor);
-        for stage in self.init_stages {
+        for stage in self.init_stages.iter() {
             stage.add_to_pass(&mut compute_pass);
         }
         drop(compute_pass);
@@ -137,7 +123,7 @@ impl CG {
             });
             let mut compute_pass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-            for s in self.stages {
+            for s in self.stages.iter() {
                 s.add_to_pass(&mut compute_pass);
             }
             drop(compute_pass);

@@ -1,7 +1,9 @@
+use std::rc::Rc;
+
 use wgpu::util::DeviceExt;
 
 use crate::{
-    conjugate_gradient::CG,
+    conjugate_gradient::{CGBuffers, CG},
     dia_matrix::DIAMatrixDescriptor,
     kernels::{kernel::Kernel, spmv::SpMVKernel, write_to_texture::WriteToTextureKernel},
 };
@@ -15,6 +17,8 @@ pub struct HeatEquation {
     u: wgpu::Buffer,        // U vector
     u_: wgpu::Buffer,       // U_ vector (we use a double buffer to avoid copying)
     tmp: wgpu::Buffer,      // Temporary buffer for storing initial SpMV result
+    cg_forward: CG,         // CG method for forward mode (tmp -> u_)
+    cg_backward: CG,        // CG method for backward mode (tmp -> u)
     iteration: usize,       // current iteration
 }
 
@@ -29,9 +33,10 @@ impl HeatEquation {
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
         });
+        let size_in_bytes = (n * n * std::mem::size_of::<f32>()) as u64;
         let u_ = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("U_ Vector"),
-            size: (n * n * std::mem::size_of::<f32>()) as u64,
+            size: size_in_bytes,
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
@@ -39,10 +44,14 @@ impl HeatEquation {
         });
         let tmp = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("tmp Vector"),
-            size: (n * n * std::mem::size_of::<f32>()) as u64,
+            size: size_in_bytes,
             usage: wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
+
+        let cg_buffers = Rc::new(CGBuffers::new(device, size_in_bytes));
+        let cg_forward = CG::new(device, cg_buffers.clone(), &a, &tmp, &u_);
+        let cg_backward = CG::new(device, cg_buffers, &a, &tmp, &u);
 
         Self {
             alpha,
@@ -53,6 +62,8 @@ impl HeatEquation {
             u,
             u_,
             tmp,
+            cg_forward,
+            cg_backward,
             iteration: 0,
         }
     }
@@ -146,28 +157,19 @@ impl HeatEquation {
         )
     }
 
-    fn compute_step_internal(
-        &self,
+    pub fn compute_step(
+        &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         texture: &wgpu::Texture,
-        u_new: &wgpu::Buffer,
-        u_old: &wgpu::Buffer,
     ) {
-        let Self {
-            alpha: _,
-            n,
-            dt: _,
-            a,
-            b,
-            u: _,
-            u_: _,
-            tmp,
-            ..
-        } = self;
-        let size_bytes = (n * n * std::mem::size_of::<f32>()) as u64;
+        let Self { b, u, u_, tmp, .. } = self;
         // First step: tmp = B * u_old
-        let initial_spmv = SpMVKernel::new(device, b, u_old, tmp);
+        let initial_spmv = if self.iteration % 2 == 0 {
+            SpMVKernel::new(device, b, u, tmp)
+        } else {
+            SpMVKernel::new(device, b, u_, tmp)
+        };
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Initial SpMV Encoder (tmp = B*U)"),
         });
@@ -179,10 +181,18 @@ impl HeatEquation {
         queue.submit(Some(encoder.finish()));
         // Now we can treat the vector tmp as the "b" in A u_new = b
         // for our Conjugate Gradient solver
-        let cg = CG::new(device, size_bytes);
-        cg.run(device, queue, a, tmp, u_new);
+        if self.iteration % 2 == 0 {
+            self.cg_forward.run(device, queue);
+        } else {
+            self.cg_backward.run(device, queue);
+        }
+
         // now we need to write u_new to the storage texture
-        let write2texture = WriteToTextureKernel::new(device, u_new, texture);
+        let write2texture = if self.iteration % 2 == 0 {
+            WriteToTextureKernel::new(device, &self.u_, texture)
+        } else {
+            WriteToTextureKernel::new(device, &self.u, texture)
+        };
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Write to Texture Encoder"),
         });
@@ -192,19 +202,6 @@ impl HeatEquation {
         write2texture.add_to_pass(&mut compute_pass);
         drop(compute_pass);
         queue.submit(Some(encoder.finish()));
-    }
-
-    pub fn compute_step(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        texture: &wgpu::Texture,
-    ) {
-        if self.iteration % 2 == 0 {
-            self.compute_step_internal(device, queue, texture, &self.u_, &self.u)
-        } else {
-            self.compute_step_internal(device, queue, texture, &self.u, &self.u_)
-        }
         self.iteration += 1;
     }
 }
