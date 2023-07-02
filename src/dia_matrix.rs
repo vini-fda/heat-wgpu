@@ -25,7 +25,7 @@ impl DIAMatrixDescriptor {
             params: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Matrix Params Buffer"),
                 contents: bytemuck::cast_slice(&[num_cols, num_rows, num_diags]),
-                usage: wgpu::BufferUsages::STORAGE,
+                usage: wgpu::BufferUsages::UNIFORM,
             }),
             data: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Matrix Data Buffer"),
