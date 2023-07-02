@@ -39,9 +39,7 @@ impl HeatEquation {
         let tmp = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("tmp Vector"),
             size: (n * n * std::mem::size_of::<f32>()) as u64,
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
 

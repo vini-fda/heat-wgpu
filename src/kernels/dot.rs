@@ -21,42 +21,14 @@ impl DotKernel {
             source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/vec_mul.wgsl").into()),
         });
 
-        let vec_mul_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Bind group layout for element-wise vector multiplication"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            min_binding_size: None,
-                            has_dynamic_offset: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            min_binding_size: None,
-                            has_dynamic_offset: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            min_binding_size: None,
-                            has_dynamic_offset: false,
-                        },
-                        count: None,
-                    },
-                ],
-            });
+        let vec_mul_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Element-wise vector multiplication pipeline"),
+            layout: None,
+            module: &vec_mul_shader,
+            entry_point: "main",
+        });
+
+        let vec_mul_bind_group_layout = vec_mul_pipeline.get_bind_group_layout(0);
 
         let vec_mul_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Bind group for element-wise vector multiplication"),
@@ -75,20 +47,6 @@ impl DotKernel {
                     resource: tmp0.as_entire_binding(),
                 },
             ],
-        });
-
-        let vec_mul_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Element-wise vector multiplication pipeline layout"),
-                bind_group_layouts: &[&vec_mul_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
-        let vec_mul_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Element-wise vector multiplication pipeline"),
-            layout: Some(&vec_mul_pipeline_layout),
-            module: &vec_mul_shader,
-            entry_point: "main",
         });
 
         let vec_mul_workgroups = (256, 1, 1);
