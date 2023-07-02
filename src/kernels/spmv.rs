@@ -15,6 +15,8 @@ impl SpMVKernel {
         x: &wgpu::Buffer,
         y: &wgpu::Buffer,
     ) -> Self {
+        const WORKGROUP_SIZE: u32 = 256;
+        let work_size = y.size() as u32 / std::mem::size_of::<f32>() as u32;
         let spmv_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Sparse matrix-vector multiplication shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/spmv.wgsl").into()),
@@ -56,7 +58,7 @@ impl SpMVKernel {
             ],
         });
 
-        let workgroups = ((a.num_cols + 63) / 64, 1, 1);
+        let workgroups = ((work_size + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1, 1);
 
         Self {
             step: ExecutionStep::new(spmv_bind_group, spmv_pipeline, workgroups),

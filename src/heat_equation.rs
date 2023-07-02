@@ -1,3 +1,5 @@
+use wgpu::util::DeviceExt;
+
 use crate::{
     conjugate_gradient::CG,
     dia_matrix::DIAMatrixDescriptor,
@@ -17,16 +19,15 @@ pub struct HeatEquation {
 }
 
 impl HeatEquation {
-    pub fn new(device: &wgpu::Device, alpha: f32, n: usize, dt: f32) -> Self {
+    pub fn new(device: &wgpu::Device, alpha: f32, n: usize, dt: f32, u0: &[f32]) -> Self {
         let a = Self::a_matrix(device, alpha, n, dt);
         let b = Self::b_matrix(device, alpha, n, dt);
-        let u = device.create_buffer(&wgpu::BufferDescriptor {
+        let u = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("U Vector"),
-            size: (n * n * std::mem::size_of::<f32>()) as u64,
+            contents: bytemuck::cast_slice(u0),
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
         });
         let u_ = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("U_ Vector"),
@@ -194,7 +195,7 @@ impl HeatEquation {
     }
 
     pub fn compute_step(
-        &self,
+        &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         texture: &wgpu::Texture,
@@ -204,5 +205,6 @@ impl HeatEquation {
         } else {
             self.compute_step_internal(device, queue, texture, &self.u, &self.u_)
         }
+        self.iteration += 1;
     }
 }

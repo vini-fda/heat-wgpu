@@ -7,6 +7,8 @@ pub struct SAXPYUpdateKernel {
 
 impl SAXPYUpdateKernel {
     pub fn new(device: &wgpu::Device, x: &wgpu::Buffer, y: &wgpu::Buffer) -> Self {
+        const WORKGROUP_SIZE: u32 = 256;
+        let work_size = y.size() as u32 / std::mem::size_of::<f32>() as u32;
         let saxpy_update_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("SAXPY update shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/saxpy_update.wgsl").into()),
@@ -71,7 +73,7 @@ impl SAXPYUpdateKernel {
                 entry_point: "main",
             });
 
-        let workgroups = (1, 1, 1);
+        let workgroups = ((work_size + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1, 1);
 
         Self {
             step: ExecutionStep::new(saxpy_update_bind_group, saxpy_update_pipeline, workgroups),

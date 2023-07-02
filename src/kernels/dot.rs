@@ -17,6 +17,8 @@ impl DotKernel {
         tmp1: &wgpu::Buffer,
         output: &wgpu::Buffer,
     ) -> Self {
+        const WORKGROUP_SIZE: u32 = 256;
+        let work_size = y.size() as u32 / std::mem::size_of::<f32>() as u32;
         // First stage of iteration: tmp = x .* y
         let vec_mul_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Element-wise vector multiplication shader"),
@@ -51,11 +53,10 @@ impl DotKernel {
             ],
         });
 
-        let vec_mul_workgroups = (256, 1, 1);
+        let vec_mul_workgroups = ((work_size + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1, 1);
 
         // Second stage of iteration: output_vec = block_sum(tmp)
         let shader_string = include_str!("../shaders/sum_reduce.wgsl");
-        const WORKGROUP_SIZE: u32 = 256;
         let pattern = Regex::new(r"\{WORKGROUP_SIZE\}").unwrap();
         let shader_string = pattern.replace_all(shader_string, WORKGROUP_SIZE.to_string().as_str());
         let block_sum_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -87,13 +88,12 @@ impl DotKernel {
             ],
         });
 
-        let block_sum_workgroups = (WORKGROUP_SIZE, 1, 1);
+        let block_sum_workgroups = ((work_size + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1, 1);
 
         // Third stage of iteration: output = sum(output_vec) (final output as scalar)
         let sum_shader_string = include_str!("../shaders/sum_reduce_final.wgsl");
         let pattern = Regex::new(r"\{NUM_GROUPS\}").unwrap();
-        let work_size = (x.size() / (std::mem::size_of::<f32>() as u64)) as u32;
-        let num_groups = (work_size + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+        let num_groups = block_sum_workgroups.0;
         let sum_shader_string =
             pattern.replace_all(sum_shader_string, num_groups.to_string().as_str());
         let sum_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {

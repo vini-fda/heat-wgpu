@@ -1,8 +1,17 @@
+use regex::Regex;
+
 use super::{kernel::Kernel, ExecutionStep};
 
-/// Performs y = (a1/a2) * x + y
+/// Performs y = (a1/a2) * x OP y
+/// where OP is either addition or subtraction.
 pub struct SAXPYUpdateDivKernel {
     step: ExecutionStep,
+}
+
+#[derive(Copy, Clone)]
+pub enum Operation {
+    Add,
+    Sub,
 }
 
 impl SAXPYUpdateDivKernel {
@@ -12,15 +21,27 @@ impl SAXPYUpdateDivKernel {
         a2: &wgpu::Buffer,
         x: &wgpu::Buffer,
         y: &wgpu::Buffer,
+        op: Operation,
     ) -> Self {
+        const WORKGROUP_SIZE: u64 = 256;
+        let work_size = y.size() / std::mem::size_of::<f32>() as u64;
+        let shader_source = include_str!("../shaders/saxpy_update_div.wgsl");
+        let pattern = Regex::new(r"\{OP\}").unwrap();
+        let shader_string = pattern.replace_all(
+            shader_source,
+            match op {
+                Operation::Add => "+",
+                Operation::Sub => "-",
+            },
+        );
         let saxpy_update_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("SAXPY update shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/saxpy_update.wgsl").into()),
+            label: Some("SAXPY update div shader"),
+            source: wgpu::ShaderSource::Wgsl(shader_string),
         });
 
         let saxpy_update_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Bind group layout for SAXPY update"),
+                label: Some("Bind group layout for SAXPY update div"),
                 entries: &[
                     // binding 0: y
                     wgpu::BindGroupLayoutEntry {
@@ -107,7 +128,11 @@ impl SAXPYUpdateDivKernel {
                 entry_point: "main",
             });
 
-        let workgroups = (1, 1, 1);
+        let workgroups = (
+            ((work_size + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE) as u32,
+            1,
+            1,
+        );
 
         Self {
             step: ExecutionStep::new(saxpy_update_bind_group, saxpy_update_pipeline, workgroups),

@@ -1,8 +1,11 @@
 use crate::{
     dia_matrix::DIAMatrixDescriptor,
     kernels::{
-        dot::DotKernel, kernel::Kernel, saxpy_update::SAXPYUpdateKernel,
-        saxpy_update_div::SAXPYUpdateDivKernel, spmv::SpMVKernel,
+        dot::DotKernel,
+        kernel::Kernel,
+        saxpy_update::SAXPYUpdateKernel,
+        saxpy_update_div::{Operation, SAXPYUpdateDivKernel},
+        spmv::SpMVKernel,
     },
 };
 
@@ -114,16 +117,16 @@ impl CG {
         let sigma_prime_stage = DotKernel::new(device, p, q, tmp0, tmp1, sigma_prime);
 
         // Fourth stage of iteration: x = x + (sigma / sigma_prime) * p
-        let x_stage = SAXPYUpdateDivKernel::new(device, sigma, sigma_prime, p, x);
+        let x_stage = SAXPYUpdateDivKernel::new(device, sigma, sigma_prime, p, x, Operation::Add);
 
         // Fifth stage of iteration: r = r - (sigma / sigma_prime) * q
-        let r_stage = SAXPYUpdateDivKernel::new(device, sigma, sigma_prime, q, r);
+        let r_stage = SAXPYUpdateDivKernel::new(device, sigma, sigma_prime, q, r, Operation::Sub);
 
         // Sixth stage of iteration: sigma_prime = dot(r, r)
         let sigma_prime_stage2 = DotKernel::new(device, r, r, tmp0, tmp1, sigma_prime);
 
         // Seventh stage of iteration: p = r + (sigma_prime / sigma) * p
-        let p_stage = SAXPYUpdateDivKernel::new(device, sigma_prime, sigma, r, p);
+        let p_stage = SAXPYUpdateDivKernel::new(device, sigma_prime, sigma, r, p, Operation::Add);
 
         // create Vec<Box<dyn Kernel>> to iterate over
         vec![
