@@ -88,27 +88,6 @@ impl CG {
         }
     }
 
-    fn init(
-        &self,
-        device: &wgpu::Device,
-        encoder: &mut wgpu::CommandEncoder,
-        a: &DIAMatrixDescriptor, // Sparse matrix A
-        b: &wgpu::Buffer,        // Vector b
-        x: &wgpu::Buffer,        // Vector x initialized with initial guess x_0
-        r: &wgpu::Buffer,
-        p: &wgpu::Buffer,
-    ) {
-        // Initialize r = b - A * x
-        let r_init0 = SpMVKernel::new(device, a, x, &r);
-        let r_init1 = SAXPYUpdateKernel::new(device, b, &r);
-        let mut compute_pass =
-            encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-        r_init0.add_to_pass(&mut compute_pass);
-        r_init1.add_to_pass(&mut compute_pass);
-        drop(compute_pass);
-        encoder.copy_buffer_to_buffer(r, 0, p, 0, r.size());
-    }
-
     /// Define the stages for a single iteration of the CG algorithm on a `wgpu::ComputePass`
     fn stages(
         &self,
@@ -172,7 +151,15 @@ impl CG {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("CG - initialization"),
         });
-        self.init(device, &mut encoder, a, b, x, r, p);
+        // Initialize r = b - A * x
+        let r_init0 = SpMVKernel::new(device, a, x, r);
+        let r_init1 = SAXPYUpdateKernel::new(device, b, r);
+        let mut compute_pass =
+            encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+        r_init0.add_to_pass(&mut compute_pass);
+        r_init1.add_to_pass(&mut compute_pass);
+        drop(compute_pass);
+        encoder.copy_buffer_to_buffer(r, 0, p, 0, r.size());
         let stages = self.stages(device, a, x);
         for _ in 0..self.max_steps {
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
