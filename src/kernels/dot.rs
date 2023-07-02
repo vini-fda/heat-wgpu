@@ -1,3 +1,5 @@
+use regex::Regex;
+
 use super::{kernel::Kernel, ExecutionStep};
 
 pub struct DotKernel {
@@ -52,37 +54,23 @@ impl DotKernel {
         let vec_mul_workgroups = (256, 1, 1);
 
         // Second stage of iteration: output_vec = block_sum(tmp)
+        let shader_string = include_str!("../shaders/sum_reduce.wgsl");
+        const WORKGROUP_SIZE: u32 = 256;
+        let pattern = Regex::new(r"\{WORKGROUP_SIZE\}").unwrap();
+        let shader_string = pattern.replace_all(shader_string, WORKGROUP_SIZE.to_string().as_str());
         let block_sum_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Parallel block sum-reduce shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/sum_reduce.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(shader_string),
         });
 
-        let block_sum_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Bind group layout for parallel block sum-reduce"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            min_binding_size: None,
-                            has_dynamic_offset: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            min_binding_size: None,
-                            has_dynamic_offset: false,
-                        },
-                        count: None,
-                    },
-                ],
-            });
+        let block_sum_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Parallel block sum-reduce pipeline"),
+            layout: None,
+            module: &block_sum_shader,
+            entry_point: "main",
+        });
+
+        let block_sum_bind_group_layout = block_sum_pipeline.get_bind_group_layout(0);
 
         let block_sum_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Bind group for parallel block sum-reduce"),
@@ -99,56 +87,28 @@ impl DotKernel {
             ],
         });
 
-        let block_sum_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Parallel block sum-reduce pipeline layout"),
-                bind_group_layouts: &[&block_sum_bind_group_layout],
-                push_constant_ranges: &[],
-            });
+        let block_sum_workgroups = (WORKGROUP_SIZE, 1, 1);
 
-        let block_sum_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Parallel block sum-reduce pipeline"),
-            layout: Some(&block_sum_pipeline_layout),
-            module: &block_sum_shader,
+        // Third stage of iteration: output = sum(output_vec) (final output as scalar)
+        let sum_shader_string = include_str!("../shaders/sum_reduce_final.wgsl");
+        let pattern = Regex::new(r"\{NUM_GROUPS\}").unwrap();
+        let work_size = (x.size() / (std::mem::size_of::<f32>() as u64)) as u32;
+        let num_groups = (work_size + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+        let sum_shader_string =
+            pattern.replace_all(sum_shader_string, num_groups.to_string().as_str());
+        let sum_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Parallel sum-reduce shader"),
+            source: wgpu::ShaderSource::Wgsl(sum_shader_string),
+        });
+
+        let sum_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Parallel sum-reduce pipeline"),
+            layout: None,
+            module: &sum_shader,
             entry_point: "main",
         });
 
-        let block_sum_workgroups = (256, 1, 1);
-
-        // Third stage of iteration: output = sum(output_vec) (final output as scalar)
-        let sum_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Parallel sum-reduce shader"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("../shaders/sum_reduce_final.wgsl").into(),
-            ),
-        });
-
-        let sum_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Bind group layout for parallel sum-reduce"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            min_binding_size: None,
-                            has_dynamic_offset: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            min_binding_size: None,
-                            has_dynamic_offset: false,
-                        },
-                        count: None,
-                    },
-                ],
-            });
+        let sum_bind_group_layout = sum_pipeline.get_bind_group_layout(0);
 
         let sum_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Bind group for parallel sum-reduce"),
@@ -163,19 +123,6 @@ impl DotKernel {
                     resource: output.as_entire_binding(),
                 },
             ],
-        });
-
-        let sum_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Parallel sum-reduce pipeline layout"),
-            bind_group_layouts: &[&sum_bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        let sum_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Parallel sum-reduce pipeline"),
-            layout: Some(&sum_pipeline_layout),
-            module: &sum_shader,
-            entry_point: "main",
         });
 
         let sum_workgroups = (1, 1, 1);
