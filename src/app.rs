@@ -14,7 +14,6 @@ struct App {
     size: winit::dpi::PhysicalSize<u32>,
     window: Window,
     heat_eqn: HeatEquation,
-    texture: wgpu::Texture,
     renderer: Renderer,
 }
 
@@ -127,7 +126,7 @@ impl App {
         let alpha = 0.002;
         let dt = 0.016;
 
-        let compute = HeatEquation::new(&device, alpha, n as usize, dt, &input_data);
+        let compute = HeatEquation::new(&device, alpha, n as usize, dt, &input_data, &texture);
         let renderer = Renderer::new(&device, &config, texture_view);
 
         Self {
@@ -138,7 +137,6 @@ impl App {
             config,
             size,
             heat_eqn: compute,
-            texture,
             renderer,
         }
     }
@@ -157,8 +155,7 @@ impl App {
     }
 
     fn compute_step(&mut self) {
-        self.heat_eqn
-            .compute_step(&self.device, &self.queue, &self.texture);
+        self.heat_eqn.compute_step(&self.device, &self.queue);
     }
 
     fn render(&self) -> Result<(), wgpu::SurfaceError> {
