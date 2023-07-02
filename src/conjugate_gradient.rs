@@ -11,23 +11,25 @@ use crate::{
 ///
 /// This uses the CG method to solve the system of linear equations Ax = b where A is a sparse matrix.
 pub struct CG {
-    r_init0: SpMVKernel,
-    r_init1: SAXPYUpdateKernel,
-    stages: Vec<Box<dyn Kernel>>,
+    r: wgpu::Buffer, // residual
+    p: wgpu::Buffer, // direction
+    q: wgpu::Buffer, // A * p
+    sigma: wgpu::Buffer,
+    sigma_prime: wgpu::Buffer,
+    tmp0: wgpu::Buffer,
+    tmp1: wgpu::Buffer,
     max_steps: usize,
 }
 
 impl CG {
     pub fn new(
         device: &wgpu::Device,
-        a: &DIAMatrixDescriptor, // Sparse matrix A
-        b: &wgpu::Buffer,        // Vector b
-        x: &wgpu::Buffer,        // Vector x initialized with initial guess x_0
+        size: wgpu::BufferAddress, // size of the vectors, in bytes
     ) -> Self {
         // before iterating, must set up the r(residual) and p(direction) vectors as GPU buffers
         let r = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("r"),
-            size: b.size(),
+            size,
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
@@ -36,7 +38,7 @@ impl CG {
 
         let p = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("p"),
-            size: b.size(),
+            size,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -44,7 +46,7 @@ impl CG {
         // Intermediate Buffers for iteration
         let q = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("q"),
-            size: b.size(),
+            size,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -63,20 +65,67 @@ impl CG {
         });
         let tmp0 = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("tmp0"),
-            size: b.size(),
+            size,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let tmp1 = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("tmp1"),
-            size: b.size(),
+            size,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+
+        Self {
+            r,
+            p,
+            q,
+            sigma,
+            sigma_prime,
+            tmp0,
+            tmp1,
+            max_steps: 1000,
+        }
+    }
+
+    fn init(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        a: &DIAMatrixDescriptor, // Sparse matrix A
+        b: &wgpu::Buffer,        // Vector b
+        x: &wgpu::Buffer,        // Vector x initialized with initial guess x_0
+        r: &wgpu::Buffer,
+        p: &wgpu::Buffer,
+    ) {
         // Initialize r = b - A * x
         let r_init0 = SpMVKernel::new(device, a, x, &r);
         let r_init1 = SAXPYUpdateKernel::new(device, b, &r);
+        let mut compute_pass =
+            encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+        r_init0.add_to_pass(&mut compute_pass);
+        r_init1.add_to_pass(&mut compute_pass);
+        drop(compute_pass);
+        encoder.copy_buffer_to_buffer(r, 0, p, 0, r.size());
+    }
 
+    /// Define the stages for a single iteration of the CG algorithm on a `wgpu::ComputePass`
+    fn stages(
+        &self,
+        device: &wgpu::Device,
+        a: &DIAMatrixDescriptor,
+        x: &wgpu::Buffer,
+    ) -> Vec<Box<dyn Kernel>> {
+        let Self {
+            r,
+            p,
+            q,
+            sigma,
+            sigma_prime,
+            tmp0,
+            tmp1,
+            ..
+        } = self;
         // Iteration stages
         // First stage of iteration: sigma = dot(r, r)
         let sigma_stage = DotKernel::new(device, &r, &r, &tmp0, &tmp1, &sigma);
@@ -99,56 +148,41 @@ impl CG {
         // Seventh stage of iteration: p = r + (sigma_prime / sigma) * p
         let p_stage = SAXPYUpdateDivKernel::new(device, &sigma_prime, &sigma, &r, &p);
 
-        Self {
-            r_init0,
-            r_init1,
-            stages: vec![
-                Box::new(sigma_stage),
-                Box::new(q_stage),
-                Box::new(sigma_prime_stage),
-                Box::new(x_stage),
-                Box::new(r_stage),
-                Box::new(sigma_prime_stage2),
-                Box::new(p_stage),
-            ],
-            max_steps: 1000,
-        }
-    }
-
-    fn init(&self, encoder: &mut wgpu::CommandEncoder, r: &wgpu::Buffer, p: &wgpu::Buffer) {
-        let mut compute_pass =
-            encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-        self.r_init0.add_to_pass(&mut compute_pass);
-        self.r_init1.add_to_pass(&mut compute_pass);
-        drop(compute_pass);
-        encoder.copy_buffer_to_buffer(r, 0, p, 0, r.size());
-    }
-
-    /// Define the stages for a single iteration of the CG algorithm on a `wgpu::ComputePass`
-    fn define_stages<'a>(&'a self, pass: &mut wgpu::ComputePass<'a>) {
-        for stage in &self.stages {
-            stage.add_to_pass(pass);
-        }
+        // create Vec<Box<dyn Kernel>> to iterate over
+        vec![
+            Box::new(sigma_stage),
+            Box::new(q_stage),
+            Box::new(sigma_prime_stage),
+            Box::new(x_stage),
+            Box::new(r_stage),
+            Box::new(sigma_prime_stage2),
+            Box::new(p_stage),
+        ]
     }
 
     pub fn run(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        r: &wgpu::Buffer,
-        p: &wgpu::Buffer,
+        a: &DIAMatrixDescriptor, // Sparse matrix A
+        b: &wgpu::Buffer,        // Vector b
+        x: &wgpu::Buffer,        // Vector x initialized with initial guess x_0
     ) {
+        let Self { r, p, .. } = self;
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("CG - initialization"),
         });
-        self.init(&mut encoder, r, p);
+        self.init(device, &mut encoder, a, b, x, r, p);
+        let stages = self.stages(device, a, x);
         for _ in 0..self.max_steps {
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("CG - iteration step"),
             });
             let mut compute_pass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-            self.define_stages(&mut compute_pass);
+            for s in stages.iter() {
+                s.add_to_pass(&mut compute_pass);
+            }
             drop(compute_pass);
             queue.submit(Some(encoder.finish()));
         }
