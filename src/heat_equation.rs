@@ -94,6 +94,17 @@ impl HeatEquation {
                 }
             }
         }
-        DIAMatrixDescriptor::new(device, num_cols as u32, num_rows as u32, num_diags as u32, &data, &offsets)
+        DIAMatrixDescriptor::new(
+            device,
+            num_cols as u32,
+            num_rows as u32,
+            num_diags as u32,
+            &data,
+            &offsets,
+        )
+    }
+
+    fn compute_step(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        todo!()
     }
 }
