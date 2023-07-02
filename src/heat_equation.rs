@@ -184,9 +184,13 @@ impl HeatEquation {
 
     fn compute_step(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
         if self.iteration % 2 == 0 {
-            self.compute_step_internal(device, queue, &self.u, &self.u_)
-        } else {
             self.compute_step_internal(device, queue, &self.u_, &self.u)
+        } else {
+            self.compute_step_internal(device, queue, &self.u, &self.u_)
         }
+    }
+
+    fn render_step(&self, device: &wgpu::Device, queue: &wgpu::Queue, surface: &wgpu::Surface) {
+        todo!()
     }
 }
