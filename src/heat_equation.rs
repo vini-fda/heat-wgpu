@@ -13,7 +13,6 @@ pub struct HeatEquation {
     u: wgpu::Buffer,        // U vector
     u_: wgpu::Buffer,       // U_ vector (we use a double buffer to avoid copying)
     tmp: wgpu::Buffer,      // Temporary buffer for storing initial SpMV result
-    texture: wgpu::Texture, // Texture for rendering
     iteration: usize,       // current iteration
 }
 
@@ -45,24 +44,7 @@ impl HeatEquation {
                 | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let texture_size = wgpu::Extent3d {
-            width: n as u32,
-            height: n as u32,
-            depth_or_array_layers: 1,
-        };
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Heat Equation Texture"),
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R32Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::STORAGE_BINDING
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+
         Self {
             alpha,
             n,
@@ -72,7 +54,6 @@ impl HeatEquation {
             u,
             u_,
             tmp,
-            texture,
             iteration: 0,
         }
     }
@@ -170,6 +151,7 @@ impl HeatEquation {
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        texture: &wgpu::Texture,
         u_new: &wgpu::Buffer,
         u_old: &wgpu::Buffer,
     ) {
@@ -182,7 +164,6 @@ impl HeatEquation {
             u: _,
             u_: _,
             tmp,
-            texture,
             ..
         } = self;
         let size_bytes = (n * n * std::mem::size_of::<f32>()) as u64;
@@ -214,15 +195,16 @@ impl HeatEquation {
         queue.submit(Some(encoder.finish()));
     }
 
-    fn compute_step(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    pub fn compute_step(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        texture: &wgpu::Texture,
+    ) {
         if self.iteration % 2 == 0 {
-            self.compute_step_internal(device, queue, &self.u_, &self.u)
+            self.compute_step_internal(device, queue, texture, &self.u_, &self.u)
         } else {
-            self.compute_step_internal(device, queue, &self.u, &self.u_)
+            self.compute_step_internal(device, queue, texture, &self.u, &self.u_)
         }
-    }
-
-    fn render_step(&self, device: &wgpu::Device, queue: &wgpu::Queue, surface: &wgpu::Surface) {
-        todo!()
     }
 }

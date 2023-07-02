@@ -4,7 +4,7 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-use crate::{compute::Compute, directional_bind_group::Direction, renderer::Renderer};
+use crate::{heat_equation::HeatEquation, renderer::Renderer};
 
 struct App {
     surface: wgpu::Surface,
@@ -13,9 +13,9 @@ struct App {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     window: Window,
-    compute: Compute,
+    heat_eqn: HeatEquation,
+    texture: wgpu::Texture,
     renderer: Renderer,
-    iteration: u32,
 }
 
 impl App {
@@ -89,15 +89,16 @@ impl App {
         surface.configure(&device, &config);
 
         // ------ GPU Compute config ------
-        let width = 512;
-        let height = 512;
+        let n = 512;
+        let width = n;
+        let height = n;
         let texture_size = wgpu::Extent3d {
             width,
             height,
             depth_or_array_layers: 1,
         };
-        let texture_a = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Texture A"),
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Heat Equation Texture"),
             size: texture_size,
             mip_level_count: 1,
             sample_count: 1,
@@ -109,10 +110,10 @@ impl App {
                 | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        // Initialize texture A with some data
+        // Initialize texture with some data
         let input_data = generate_input_data(width, height);
         queue.write_texture(
-            texture_a.as_image_copy(),
+            texture.as_image_copy(),
             bytemuck::cast_slice(input_data.as_slice()),
             wgpu::ImageDataLayout {
                 offset: 0,
@@ -121,24 +122,13 @@ impl App {
             },
             texture_size,
         );
-        let texture_b = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Texture B"),
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R32Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::STORAGE_BINDING
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let txa_view = &texture_a.create_view(&wgpu::TextureViewDescriptor::default());
-        let txb_view = &texture_b.create_view(&wgpu::TextureViewDescriptor::default());
+        let texture_view = &texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        let compute = Compute::new(&device, texture_size, txa_view, txb_view);
-        let renderer = Renderer::new(&device, &config, txa_view, txb_view);
+        let alpha = 0.02;
+        let dt = 0.016;
+
+        let compute = HeatEquation::new(&device, alpha, n as usize, dt);
+        let renderer = Renderer::new(&device, &config, texture_view);
 
         Self {
             window,
@@ -147,9 +137,9 @@ impl App {
             queue,
             config,
             size,
-            compute,
+            heat_eqn: compute,
+            texture,
             renderer,
-            iteration: 0,
         }
     }
 
@@ -166,23 +156,14 @@ impl App {
         }
     }
 
-    fn direction(&self) -> Direction {
-        if self.iteration % 2 == 0 {
-            Direction::Forward
-        } else {
-            Direction::Backward
-        }
-    }
-
     fn compute_step(&mut self) {
-        self.compute
-            .step(&self.device, &self.queue, self.direction());
-        self.iteration += 1;
+        self.heat_eqn
+            .compute_step(&self.device, &self.queue, &self.texture);
     }
 
     fn render(&self) -> Result<(), wgpu::SurfaceError> {
         self.renderer
-            .render(&self.device, &self.surface, &self.queue, self.direction())
+            .render(&self.device, &self.surface, &self.queue)
     }
 }
 
