@@ -3,6 +3,7 @@ pub mod kernel;
 pub mod saxpy_update;
 pub mod saxpy_update_div;
 pub mod spmv;
+pub mod write_to_texture;
 
 pub struct ExecutionStep {
     bind_group: wgpu::BindGroup,
