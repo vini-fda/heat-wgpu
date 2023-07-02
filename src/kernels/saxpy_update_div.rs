@@ -1,12 +1,18 @@
 use super::{kernel::Kernel, ExecutionStep};
 
-/// Performs y = x - y
-pub struct SAXPYUpdateKernel {
+/// Performs y = (a1/a2) * x + y
+pub struct SAXPYUpdateDivKernel {
     step: ExecutionStep,
 }
 
-impl SAXPYUpdateKernel {
-    pub fn new(device: &wgpu::Device, x: &wgpu::Buffer, y: &wgpu::Buffer) -> Self {
+impl SAXPYUpdateDivKernel {
+    pub fn new(
+        device: &wgpu::Device,
+        a1: &wgpu::Buffer,
+        a2: &wgpu::Buffer,
+        x: &wgpu::Buffer,
+        y: &wgpu::Buffer,
+    ) -> Self {
         let saxpy_update_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("SAXPY update shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/saxpy_update.wgsl").into()),
@@ -38,6 +44,28 @@ impl SAXPYUpdateKernel {
                         },
                         count: None,
                     },
+                    // binding 2: a1
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            min_binding_size: None,
+                            has_dynamic_offset: false,
+                        },
+                        count: None,
+                    },
+                    // binding 3: a2
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            min_binding_size: None,
+                            has_dynamic_offset: false,
+                        },
+                        count: None,
+                    },
                 ],
             });
 
@@ -52,6 +80,14 @@ impl SAXPYUpdateKernel {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: x.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: a1.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: a2.as_entire_binding(),
                 },
             ],
         });
@@ -79,7 +115,7 @@ impl SAXPYUpdateKernel {
     }
 }
 
-impl Kernel for SAXPYUpdateKernel {
+impl Kernel for SAXPYUpdateDivKernel {
     fn add_to_pass<'a>(&'a self, pass: &mut wgpu::ComputePass<'a>) {
         self.step.add_to_pass(pass);
     }

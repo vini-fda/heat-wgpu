@@ -1,14 +1,14 @@
-use super::ExecutionStep;
+use super::{kernel::Kernel, ExecutionStep};
 use crate::dia_matrix::DIAMatrixDescriptor;
 
 /// Specialized sparse matrix-vector multiplication kernel.
 ///
 /// Describes y = A * x.
-pub struct SpMV {
+pub struct SpMVKernel {
     step: ExecutionStep,
 }
 
-impl SpMV {
+impl SpMVKernel {
     pub fn new(
         device: &wgpu::Device,
         a: &DIAMatrixDescriptor,
@@ -127,5 +127,11 @@ impl SpMV {
         Self {
             step: ExecutionStep::new(spmv_bind_group, spmv_pipeline, workgroups),
         }
+    }
+}
+
+impl Kernel for SpMVKernel {
+    fn add_to_pass<'a>(&'a self, pass: &mut wgpu::ComputePass<'a>) {
+        self.step.add_to_pass(pass);
     }
 }

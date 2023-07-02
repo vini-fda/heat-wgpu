@@ -1,4 +1,4 @@
-use super::ExecutionStep;
+use super::{kernel::Kernel, ExecutionStep};
 
 pub struct DotKernel {
     vec_mul: ExecutionStep,
@@ -231,5 +231,13 @@ impl DotKernel {
             ),
             sum_reduce: ExecutionStep::new(sum_bind_group, sum_pipeline, sum_workgroups),
         }
+    }
+}
+
+impl Kernel for DotKernel {
+    fn add_to_pass<'a>(&'a self, pass: &mut wgpu::ComputePass<'a>) {
+        self.vec_mul.add_to_pass(pass);
+        self.block_sum_reduce.add_to_pass(pass);
+        self.sum_reduce.add_to_pass(pass);
     }
 }

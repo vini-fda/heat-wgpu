@@ -1,6 +1,7 @@
 pub mod dot;
 pub mod kernel;
 pub mod saxpy_update;
+pub mod saxpy_update_div;
 pub mod spmv;
 
 pub struct ExecutionStep {
@@ -20,5 +21,11 @@ impl ExecutionStep {
             pipeline,
             workgroups,
         }
+    }
+
+    pub fn add_to_pass<'a>(&'a self, pass: &mut wgpu::ComputePass<'a>) {
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &self.bind_group, &[]);
+        pass.dispatch_workgroups(self.workgroups.0, self.workgroups.1, self.workgroups.2);
     }
 }
