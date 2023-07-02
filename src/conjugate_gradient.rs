@@ -160,6 +160,8 @@ impl CG {
         r_init1.add_to_pass(&mut compute_pass);
         drop(compute_pass);
         encoder.copy_buffer_to_buffer(r, 0, p, 0, r.size());
+        queue.submit(Some(encoder.finish()));
+        // describes all the stages in a single iteration of the CG algorithm
         let stages = self.stages(device, a, x);
         for _ in 0..self.max_steps {
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
