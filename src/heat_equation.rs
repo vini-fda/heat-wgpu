@@ -1,19 +1,47 @@
 use crate::dia_matrix::DIAMatrixDescriptor;
 
 pub struct HeatEquation {
-    alpha: f32, // thermal diffusivity
-    n: usize,   // number of grid points in x and y directions
-    dt: f32,    // time step
+    alpha: f32,             // thermal diffusivity
+    n: usize,               // number of grid points in x and y directions
+    dt: f32,                // time step
+    a: DIAMatrixDescriptor, // A matrix
+    b: DIAMatrixDescriptor, // B matrix
+    u: wgpu::Buffer,        // U vector
+    u_: wgpu::Buffer,       // U_ vector (we use a double buffer to avoid copying)
 }
 
 impl HeatEquation {
-    pub fn new(alpha: f32, n: usize, dt: f32) -> Self {
-        Self { alpha, n, dt }
+    pub fn new(device: &wgpu::Device, alpha: f32, n: usize, dt: f32) -> Self {
+        let a = Self::a_matrix(device, alpha, n, dt);
+        let b = Self::b_matrix(device, alpha, n, dt);
+        let u = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("U Vector"),
+            size: (n * n * std::mem::size_of::<f32>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let u_ = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("U Vector"),
+            size: (n * n * std::mem::size_of::<f32>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        Self {
+            alpha,
+            n,
+            dt,
+            a,
+            b,
+            u,
+            u_,
+        }
     }
 
-    pub fn a_matrix(&self, device: &wgpu::Device) -> DIAMatrixDescriptor {
-        let &Self { alpha, n, dt } = self;
-
+    fn a_matrix(device: &wgpu::Device, alpha: f32, n: usize, dt: f32) -> DIAMatrixDescriptor {
         let m = n * n;
         let num_cols = m;
         let num_rows = m;
@@ -58,9 +86,7 @@ impl HeatEquation {
     }
 
     /// Same as `a_matrix`, but gamma has a negative sign
-    pub fn b_matrix(&self, device: &wgpu::Device) -> DIAMatrixDescriptor {
-        let &Self { alpha, n, dt } = self;
-
+    fn b_matrix(device: &wgpu::Device, alpha: f32, n: usize, dt: f32) -> DIAMatrixDescriptor {
         let m = n * n;
         let num_cols = m;
         let num_rows = m;
