@@ -1,4 +1,3 @@
-use crate::directional_bind_group::{Direction, DirectionalBindGroup};
 use crate::vertex::Vertex;
 use wgpu::util::DeviceExt;
 
@@ -12,7 +11,7 @@ const VERTICES: &[Vertex] = &[
 const INDICES: &[u16] = &[0, 2, 1, 0, 3, 2];
 
 pub struct Renderer {
-    bind_group: DirectionalBindGroup,
+    bind_group: wgpu::BindGroup,
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
@@ -23,8 +22,7 @@ impl Renderer {
     pub fn new(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
-        texture_a: &wgpu::TextureView,
-        texture_b: &wgpu::TextureView,
+        texture: &wgpu::TextureView,
     ) -> Self {
         let render_texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -71,26 +69,7 @@ impl Renderer {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(texture_b),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&render_sampler),
-                    },
-                ],
-            });
-
-        // Creates a bind group for the render pass
-        // in the backward configuration, which means that the texture A
-        // is to be rendered to the screen
-        let render_texture_bind_group_backward =
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Render texture bind group (backward configuration)"),
-                layout: &render_texture_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(texture_a),
+                        resource: wgpu::BindingResource::TextureView(texture),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
@@ -156,10 +135,7 @@ impl Renderer {
 
         let num_indices = INDICES.len() as u32;
         Self {
-            bind_group: DirectionalBindGroup::new(
-                render_texture_bind_group_forward,
-                render_texture_bind_group_backward,
-            ),
+            bind_group: render_texture_bind_group_forward,
             pipeline,
             vertex_buffer,
             index_buffer,
@@ -171,7 +147,6 @@ impl Renderer {
         device: &wgpu::Device,
         surface: &wgpu::Surface,
         queue: &wgpu::Queue,
-        direction: Direction,
     ) -> Result<(), wgpu::SurfaceError> {
         let output = surface.get_current_texture()?;
         let view = output
@@ -193,7 +168,7 @@ impl Renderer {
             depth_stencil_attachment: None,
         });
         render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, self.bind_group.get(direction), &[]);
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
