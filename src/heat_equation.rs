@@ -1,4 +1,8 @@
-use crate::dia_matrix::DIAMatrixDescriptor;
+use crate::{
+    conjugate_gradient::CG,
+    dia_matrix::DIAMatrixDescriptor,
+    kernels::{kernel::Kernel, spmv::SpMVKernel},
+};
 
 pub struct HeatEquation {
     alpha: f32,             // thermal diffusivity
@@ -8,6 +12,8 @@ pub struct HeatEquation {
     b: DIAMatrixDescriptor, // B matrix
     u: wgpu::Buffer,        // U vector
     u_: wgpu::Buffer,       // U_ vector (we use a double buffer to avoid copying)
+    tmp: wgpu::Buffer,      // Temporary buffer for storing initial SpMV result
+    iteration: usize,       // current iteration
 }
 
 impl HeatEquation {
@@ -23,7 +29,15 @@ impl HeatEquation {
             mapped_at_creation: false,
         });
         let u_ = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("U Vector"),
+            label: Some("U_ Vector"),
+            size: (n * n * std::mem::size_of::<f32>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let tmp = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("tmp Vector"),
             size: (n * n * std::mem::size_of::<f32>()) as u64,
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC
@@ -38,6 +52,8 @@ impl HeatEquation {
             b,
             u,
             u_,
+            tmp,
+            iteration: 0,
         }
     }
 
@@ -130,7 +146,47 @@ impl HeatEquation {
         )
     }
 
+    fn compute_step_internal(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        u_new: &wgpu::Buffer,
+        u_old: &wgpu::Buffer,
+    ) {
+        let Self {
+            alpha: _,
+            n,
+            dt: _,
+            a,
+            b,
+            u: _,
+            u_: _,
+            tmp,
+            ..
+        } = self;
+        let size_bytes = (n * n * std::mem::size_of::<f32>()) as u64;
+        // First step: tmp = B * u_old
+        let initial_spmv = SpMVKernel::new(device, b, u_old, tmp);
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Initial SpMV Encoder (tmp = B*U)"),
+        });
+        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Initial SpMV Compute Pass (tmp = B*U)"),
+        });
+        initial_spmv.add_to_pass(&mut compute_pass);
+        drop(compute_pass);
+        queue.submit(Some(encoder.finish()));
+        // Now we can treat the vector tmp as the "b" in A u_new = b
+        // for our Conjugate Gradient solver
+        let cg = CG::new(device, size_bytes);
+        cg.run(device, queue, a, tmp, u_new);
+    }
+
     fn compute_step(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        todo!()
+        if self.iteration % 2 == 0 {
+            self.compute_step_internal(device, queue, &self.u, &self.u_)
+        } else {
+            self.compute_step_internal(device, queue, &self.u_, &self.u)
+        }
     }
 }
