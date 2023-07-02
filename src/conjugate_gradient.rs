@@ -107,25 +107,25 @@ impl CG {
         } = self;
         // Iteration stages
         // First stage of iteration: sigma = dot(r, r)
-        let sigma_stage = DotKernel::new(device, &r, &r, &tmp0, &tmp1, &sigma);
+        let sigma_stage = DotKernel::new(device, r, r, tmp0, tmp1, sigma);
 
         // Second stage of iteration: q = A * p (Sparse matrix-vector multiplication)
-        let q_stage = SpMVKernel::new(device, a, &p, &q);
+        let q_stage = SpMVKernel::new(device, a, p, q);
 
         // Third stage of iteration: sigma_prime = dot(p, q)
-        let sigma_prime_stage = DotKernel::new(device, &p, &q, &tmp0, &tmp1, &sigma_prime);
+        let sigma_prime_stage = DotKernel::new(device, p, q, tmp0, tmp1, sigma_prime);
 
         // Fourth stage of iteration: x = x + (sigma / sigma_prime) * p
-        let x_stage = SAXPYUpdateDivKernel::new(device, &sigma, &sigma_prime, &p, x);
+        let x_stage = SAXPYUpdateDivKernel::new(device, sigma, sigma_prime, p, x);
 
         // Fifth stage of iteration: r = r - (sigma / sigma_prime) * q
-        let r_stage = SAXPYUpdateDivKernel::new(device, &sigma, &sigma_prime, &q, &r);
+        let r_stage = SAXPYUpdateDivKernel::new(device, sigma, sigma_prime, q, r);
 
         // Sixth stage of iteration: sigma_prime = dot(r, r)
-        let sigma_prime_stage2 = DotKernel::new(device, &r, &r, &tmp0, &tmp1, &sigma_prime);
+        let sigma_prime_stage2 = DotKernel::new(device, r, r, tmp0, tmp1, sigma_prime);
 
         // Seventh stage of iteration: p = r + (sigma_prime / sigma) * p
-        let p_stage = SAXPYUpdateDivKernel::new(device, &sigma_prime, &sigma, &r, &p);
+        let p_stage = SAXPYUpdateDivKernel::new(device, sigma_prime, sigma, r, p);
 
         // create Vec<Box<dyn Kernel>> to iterate over
         vec![
