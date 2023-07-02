@@ -1,7 +1,7 @@
 use crate::{
     conjugate_gradient::CG,
     dia_matrix::DIAMatrixDescriptor,
-    kernels::{kernel::Kernel, spmv::SpMVKernel},
+    kernels::{kernel::Kernel, spmv::SpMVKernel, write_to_texture::WriteToTextureKernel},
 };
 
 pub struct HeatEquation {
@@ -13,6 +13,7 @@ pub struct HeatEquation {
     u: wgpu::Buffer,        // U vector
     u_: wgpu::Buffer,       // U_ vector (we use a double buffer to avoid copying)
     tmp: wgpu::Buffer,      // Temporary buffer for storing initial SpMV result
+    texture: wgpu::Texture, // Texture for rendering
     iteration: usize,       // current iteration
 }
 
@@ -44,6 +45,24 @@ impl HeatEquation {
                 | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let texture_size = wgpu::Extent3d {
+            width: n as u32,
+            height: n as u32,
+            depth_or_array_layers: 1,
+        };
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Heat Equation Texture"),
+            size: texture_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R32Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
         Self {
             alpha,
             n,
@@ -53,6 +72,7 @@ impl HeatEquation {
             u,
             u_,
             tmp,
+            texture,
             iteration: 0,
         }
     }
@@ -162,6 +182,7 @@ impl HeatEquation {
             u: _,
             u_: _,
             tmp,
+            texture,
             ..
         } = self;
         let size_bytes = (n * n * std::mem::size_of::<f32>()) as u64;
@@ -180,6 +201,17 @@ impl HeatEquation {
         // for our Conjugate Gradient solver
         let cg = CG::new(device, size_bytes);
         cg.run(device, queue, a, tmp, u_new);
+        // now we need to write u_new to the storage texture
+        let write2texture = WriteToTextureKernel::new(device, u_new, texture);
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Write to Texture Encoder"),
+        });
+        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Write to Texture Compute Pass"),
+        });
+        write2texture.add_to_pass(&mut compute_pass);
+        drop(compute_pass);
+        queue.submit(Some(encoder.finish()));
     }
 
     fn compute_step(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
