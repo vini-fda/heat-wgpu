@@ -52,6 +52,10 @@ cargo run --release
 - LeVeque, R. J. (2007). *Finite difference methods for ordinary and partial differential equations: steady-state and time-dependent problems. Society for Industrial and Applied Mathematics*.
 - Shewchuk, J. R. (1994). [*An introduction to the conjugate gradient method without the agonizing pain*](https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf).
 - Bell, N., & Garland, M. (2008). *Efficient sparse matrix-vector multiplication on CUDA (Vol. 2, No. 5). Nvidia Technical Report NVR-2008-004, Nvidia Corporation*.
+- GPU Gems 2: Programming Techniques for High-Performance Graphics and General-Purpose Computation. 2005. Addison-Wesley Professional.
+  - Specifically [*Chapter 44: A GPU Framework for Solving Systems of Linear Equations*](https://developer.nvidia.com/gpugems/gpugems2/part-vi-simulation-and-numerical-algorithms/chapter-44-gpu-framework-solving), which also cites the following papers:
+    - Bolz, J., I. Farmer, E. Grinspun, and P. Schröder. 2003. "Sparse Matrix Solvers on the GPU: Conjugate Gradients and Multigrid." *ACM Transactions on Graphics (Proceedings of SIGGRAPH 2003)* 22(3), pp. 917–924.
+    - Krüger, Jens, and Rüdiger Westermann. 2003. "Linear Algebra Operators for GPU Implementation of Numerical Algorithms." *ACM Transactions on Graphics (Proceedings of SIGGRAPH 2003)* 22(3), pp. 908–916.
 - Harris, M. (2007). *Optimizing parallel reduction in CUDA. Nvidia developer technology, 2*(4), 70.
 - Mikhailov, A. (2019). [Turbo, An Improved Rainbow Colormap for Visualization](https://ai.googleblog.com/2019/08/turbo-improved-rainbow-colormap-for.html).
 - [WebGPU specification](https://gpuweb.github.io/gpuweb/).
