@@ -53,4 +53,5 @@ cargo run --release
 - Shewchuk, J. R. (1994). [*An introduction to the conjugate gradient method without the agonizing pain*](https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf).
 - Bell, N., & Garland, M. (2008). *Efficient sparse matrix-vector multiplication on CUDA (Vol. 2, No. 5). Nvidia Technical Report NVR-2008-004, Nvidia Corporation*.
 - Harris, M. (2007). *Optimizing parallel reduction in CUDA. Nvidia developer technology, 2*(4), 70.
+- Mikhailov, A. (2019). [Turbo, An Improved Rainbow Colormap for Visualization](https://ai.googleblog.com/2019/08/turbo-improved-rainbow-colormap-for.html).
 - [WebGPU specification](https://gpuweb.github.io/gpuweb/).
