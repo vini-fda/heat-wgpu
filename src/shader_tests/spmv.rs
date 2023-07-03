@@ -14,14 +14,15 @@ mod tests {
         params: &DIAMatrixParams,
         data: &[f32],
         offsets: &[i32],
-    ) -> Option<Vec<f32>> {
+    ) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
         // Instantiates instance of WebGPU
         let instance = wgpu::Instance::default();
 
         // `request_adapter` instantiates the general connection to the GPU
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions::default())
-            .await?;
+            .await
+            .ok_or("Failed to find an appropriate adapter")?; // `?` returns the error if it exists
 
         // `request_device` instantiates the feature specific connection to the GPU, defining some parameters,
         //  `features` being the available features.
@@ -40,7 +41,7 @@ mod tests {
         let info = adapter.get_info();
         // skip this on LavaPipe temporarily
         if info.vendor == 0x10005 {
-            return None;
+            return Err("LavaPipe not supported".into());
         }
 
         execute_gpu_inner(&device, &queue, x, params, data, offsets).await
@@ -53,7 +54,7 @@ mod tests {
         params: &DIAMatrixParams,
         data: &[f32],
         offsets: &[i32],
-    ) -> Option<Vec<f32>> {
+    ) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
         // Loads the shader from WGSL
         let cs_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
@@ -202,9 +203,9 @@ mod tests {
                                     // It effectively frees the memory
 
             // Returns data from buffer
-            Some(result)
+            Ok(result)
         } else {
-            panic!("failed to run dot product compute on gpu!")
+            Err("failed to run dot product compute on gpu!".into())
         }
     }
 
@@ -223,12 +224,16 @@ mod tests {
             2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0,
         ];
         let offsets = vec![-1, 0, 1];
-        let result =
-            pollster::block_on(async { execute_gpu(&x, &params, &data, &offsets).await.unwrap() });
-        let expected = vec![
-            6.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
-            10.0, 6.0,
-        ];
-        assert_eq!(result, expected);
+        let result = pollster::block_on(async { execute_gpu(&x, &params, &data, &offsets).await });
+        match result {
+            Ok(result) => {
+                let expected = vec![
+                    6.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+                    10.0, 10.0, 6.0,
+                ];
+                assert_eq!(result, expected);
+            }
+            Err(e) => panic!("{:?}", e),
+        }
     }
 }
