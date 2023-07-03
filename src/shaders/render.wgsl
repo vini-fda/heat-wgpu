@@ -36,6 +36,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 // Turbo colormap (polynomial approximation)
 // reference: https://ai.googleblog.com/2019/08/turbo-improved-rainbow-colormap-for.html
+// Original LUT: https://gist.github.com/mikhailov-work/ee72ba4191942acecc03fe6da94fc73f
+// Authors: Anton Mikhailov (mikhailov@google.com), Ruofei Du (ruofei@google.com)
 fn TurboColormap(x: f32) -> vec3<f32> {
   let kRedVec4: vec4<f32> = vec4<f32>(0.13572138, 4.61539260, -42.66032258, 132.13108234);
   let kGreenVec4: vec4<f32> = vec4<f32>(0.09140261, 2.19418839, 4.84296658, -14.18503333);

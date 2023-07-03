@@ -61,6 +61,7 @@ impl App {
             .await
             .unwrap();
         println!("Adapter: {:?}", adapter.get_info());
+        println!("Surface: {:?}", surface.get_capabilities(&adapter));
         //device and queue
         let (device, queue) = adapter
             .request_device(
@@ -83,8 +84,10 @@ impl App {
             .get_default_config(&adapter, size.width, size.height)
             .expect("Surface isn't supported by the adapter.");
         config.present_mode = wgpu::PresentMode::Fifo;
+        config.format = wgpu::TextureFormat::Bgra8Unorm;
         let surface_view_format = config.format.add_srgb_suffix();
         config.view_formats.push(surface_view_format);
+        println!("Config: {:?}", config);
         surface.configure(&device, &config);
 
         // ------ GPU Compute config ------
