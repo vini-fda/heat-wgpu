@@ -24,7 +24,6 @@ $$ A U^{n+1} = B U^{n} $$
 
 Where $A$ is a matrix with $1 + 4 \gamma$ on the diagonal and $-\gamma$ on the off-diagonals, $U^{n+1}$ is a vector with all $U_{i,j}^{n+1}$ terms, $B$ is a matrix with $1 - 4 \gamma$ on the diagonal and $\gamma$ on the off-diagonals, and $U^{n}$ is a vector with all $U_{i,j}^{n}$ terms.
 
-
 ## Conjugate-Gradient method
 
 This is an algorithm to solve linear systems of equations. It is an iterative method, which means that it will converge to the solution after a number of iterations. The algorithm is as follows:
