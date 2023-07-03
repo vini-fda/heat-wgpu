@@ -2,15 +2,17 @@
 mod tests {
     use regex::Regex;
     use wgpu::util::DeviceExt;
+    const ERR_DID_NOT_FIND_ADAPTER: &str = "Failed to find an appropriate adapter";
 
-    async fn execute_gpu(vec_in: &[f32]) -> Option<(Vec<f32>, f32)> {
+    async fn execute_gpu(vec_in: &[f32]) -> Result<(Vec<f32>, f32), Box<dyn std::error::Error>> {
         // Instantiates instance of WebGPU
         let instance = wgpu::Instance::default();
 
         // `request_adapter` instantiates the general connection to the GPU
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions::default())
-            .await?;
+            .await
+            .ok_or(ERR_DID_NOT_FIND_ADAPTER)?; // `?` returns the error if it exists
 
         // `request_device` instantiates the feature specific connection to the GPU, defining some parameters,
         //  `features` being the available features.
@@ -29,7 +31,7 @@ mod tests {
         let info = adapter.get_info();
         // skip this on LavaPipe temporarily
         if info.vendor == 0x10005 {
-            return None;
+            return Err("LavaPipe not supported".into());
         }
 
         execute_gpu_inner(&device, &queue, vec_in).await
@@ -39,7 +41,7 @@ mod tests {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         vec_in: &[f32],
-    ) -> Option<(Vec<f32>, f32)> {
+    ) -> Result<(Vec<f32>, f32), Box<dyn std::error::Error>> {
         const WORKGROUP_SIZE: u32 = 256;
         let work_size = vec_in.len() as u32;
         let shader_input_1 = include_str!("../shaders/sum_reduce.wgsl");
@@ -215,9 +217,9 @@ mod tests {
             result_2 = r[0];
             drop(data);
         } else {
-            panic!("failed to receive buffer");
+            return Err("failed to receive buffer".into());
         }
-        Some((result_1, result_2))
+        Ok((result_1, result_2))
     }
 
     async fn load_from_buffer(device: &wgpu::Device, buffer: &wgpu::Buffer) -> Vec<f32> {
@@ -251,20 +253,30 @@ mod tests {
             // Returns data from buffer
             result
         } else {
-            panic!("failed to run dot product compute on gpu!")
+            panic!("failed to run sum-reduce compute on gpu!")
         }
     }
 
     #[test]
     fn sum_reduce() {
         let vec_in = vec![2.0; 128 * 128];
-        let (result_1, result_2) =
-            pollster::block_on(async { execute_gpu(&vec_in).await.unwrap() });
+        let result = pollster::block_on(async { execute_gpu(&vec_in).await });
 
-        println!("result1[0] = {:?}", result_1[0]);
-        println!("result1.sum() = {:?}", result_1.iter().sum::<f32>());
-        assert!(result_1.iter().sum::<f32>() == 128.0 * 128.0 * 2.0);
-        println!("result2 = {:?}", result_2);
-        assert!(result_2 == 128.0 * 128.0 * 2.0);
+        match result {
+            Ok((result_1, result_2)) => {
+                println!("result1[0] = {:?}", result_1[0]);
+                println!("result1.sum() = {:?}", result_1.iter().sum::<f32>());
+                assert!(result_1.iter().sum::<f32>() == 128.0 * 128.0 * 2.0);
+                println!("result2 = {:?}", result_2);
+                assert!(result_2 == 128.0 * 128.0 * 2.0);
+            }
+            Err(e) => {
+                if e.to_string() == ERR_DID_NOT_FIND_ADAPTER {
+                    println!("Skipping test, no adapter found");
+                } else {
+                    panic!("{:?}", e)
+                }
+            }
+        }
     }
 }

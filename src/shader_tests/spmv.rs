@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use wgpu::util::DeviceExt;
+    const ERR_DID_NOT_FIND_ADAPTER: &str = "Failed to find an appropriate adapter";
 
     #[repr(C)]
     struct DIAMatrixParams {
@@ -22,7 +23,7 @@ mod tests {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions::default())
             .await
-            .ok_or("Failed to find an appropriate adapter")?; // `?` returns the error if it exists
+            .ok_or(ERR_DID_NOT_FIND_ADAPTER)?; // `?` returns the error if it exists
 
         // `request_device` instantiates the feature specific connection to the GPU, defining some parameters,
         //  `features` being the available features.
@@ -205,7 +206,7 @@ mod tests {
             // Returns data from buffer
             Ok(result)
         } else {
-            Err("failed to run dot product compute on gpu!".into())
+            Err("failed to run SpMV compute on gpu!".into())
         }
     }
 
@@ -233,7 +234,13 @@ mod tests {
                 ];
                 assert_eq!(result, expected);
             }
-            Err(e) => panic!("{:?}", e),
+            Err(e) => {
+                if e.to_string() == ERR_DID_NOT_FIND_ADAPTER {
+                    println!("Skipping test, no adapter found");
+                } else {
+                    panic!("{:?}", e)
+                }
+            }
         }
     }
 }

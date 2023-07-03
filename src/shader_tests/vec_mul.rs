@@ -1,15 +1,20 @@
 #[cfg(test)]
 mod tests {
     use wgpu::util::DeviceExt;
+    const ERR_DID_NOT_FIND_ADAPTER: &str = "Failed to find an appropriate adapter";
 
-    async fn execute_gpu(vec_a: &[f32], vec_b: &[f32]) -> Option<Vec<f32>> {
+    async fn execute_gpu(
+        vec_a: &[f32],
+        vec_b: &[f32],
+    ) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
         // Instantiates instance of WebGPU
         let instance = wgpu::Instance::default();
 
         // `request_adapter` instantiates the general connection to the GPU
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions::default())
-            .await?;
+            .await
+            .ok_or(ERR_DID_NOT_FIND_ADAPTER)?;
 
         // `request_device` instantiates the feature specific connection to the GPU, defining some parameters,
         //  `features` being the available features.
@@ -28,7 +33,7 @@ mod tests {
         let info = adapter.get_info();
         // skip this on LavaPipe temporarily
         if info.vendor == 0x10005 {
-            return None;
+            return Err("LavaPipe not supported".into());
         }
 
         execute_gpu_inner(&device, &queue, vec_a, vec_b).await
@@ -39,7 +44,7 @@ mod tests {
         queue: &wgpu::Queue,
         vec_a: &[f32],
         vec_b: &[f32],
-    ) -> Option<Vec<f32>> {
+    ) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
         // Loads the shader from WGSL
         let cs_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
@@ -168,9 +173,9 @@ mod tests {
                                     // It effectively frees the memory
 
             // Returns data from buffer
-            Some(result)
+            Ok(result)
         } else {
-            panic!("failed to run dot product compute on gpu!")
+            Err("failed to run dot product compute on gpu!".into())
         }
     }
 
@@ -178,8 +183,16 @@ mod tests {
     fn elementwise_multiplication() {
         let vec_a = vec![2.0; 128 * 128];
         let vec_b = vec![3.0; 128 * 128];
-        let result = pollster::block_on(async { execute_gpu(&vec_a, &vec_b).await.unwrap() });
-
-        assert!(result == vec![6.0; 128 * 128]);
+        let result = pollster::block_on(async { execute_gpu(&vec_a, &vec_b).await });
+        match result {
+            Ok(result) => assert!(result == vec![6.0; 128 * 128]),
+            Err(e) => {
+                if e.to_string() == ERR_DID_NOT_FIND_ADAPTER {
+                    println!("Skipping test, no adapter found");
+                } else {
+                    panic!("{:?}", e)
+                }
+            }
+        }
     }
 }
