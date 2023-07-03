@@ -34,7 +34,7 @@ impl CG {
             buffers: buffers.clone(),
             init_stages: Self::init_stages(device, buffers.as_ref(), a, b, x),
             stages: Self::stages(device, buffers.as_ref(), a, x),
-            max_steps: 100,
+            max_steps: 10,
         }
     }
 

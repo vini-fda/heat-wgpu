@@ -123,7 +123,7 @@ impl App {
         );
         let texture_view = &texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        let alpha = 0.002;
+        let alpha = 2e-4;
         let dt = 0.016;
 
         let compute = HeatEquation::new(&device, alpha, n as usize, dt, &input_data, &texture);
