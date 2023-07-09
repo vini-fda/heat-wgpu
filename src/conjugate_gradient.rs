@@ -105,7 +105,7 @@ impl CG {
     pub fn run(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
         let CGBuffers { r, p, .. } = self.buffers.as_ref();
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("CG - initialization"),
+            label: Some("Conjugate Gradient"),
         });
         // Initialize r = b - A * x
         let cdescriptor = wgpu::ComputePassDescriptor { label: None };
@@ -115,20 +115,15 @@ impl CG {
         }
         drop(compute_pass);
         encoder.copy_buffer_to_buffer(r, 0, p, 0, r.size());
-        queue.submit(Some(encoder.finish()));
         // describes all the stages in a single iteration of the CG algorithm
         for _ in 0..self.max_steps {
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("CG - iteration step"),
-            });
             let mut compute_pass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
             for s in self.stages.iter() {
                 s.add_to_pass(&mut compute_pass);
             }
-            drop(compute_pass);
-            queue.submit(Some(encoder.finish()));
         }
+        queue.submit(Some(encoder.finish()));
     }
 }
 
