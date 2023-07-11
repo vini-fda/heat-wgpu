@@ -5,6 +5,9 @@ edition = "2021"
 
 [dependencies]
 bytemuck = { version = "1.13.1", features = ["derive"] }
+eframe = { version = "0.22.0", features = ["wgpu"] }
+egui = "0.22.0"
+egui-wgpu = { version = "0.22.0", features = ["winit"] }
 env_logger = "0.10.0"
 image = "0.24.6"
 log = "0.4"

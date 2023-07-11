@@ -1,7 +1,8 @@
 use winit::{
+    dpi::{LogicalSize, Size},
     event::*,
-    event_loop::{ControlFlow, EventLoop},
-    window::{Window, WindowBuilder},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
+    window::{Window, WindowBuilder, WindowId},
 };
 
 use crate::{heat_equation::HeatEquation, renderer::Renderer};
@@ -19,7 +20,7 @@ struct App {
 
 impl App {
     // Creating some of the wgpu types requires async code
-    async fn new(window: Window) -> Self {
+    fn new(window: Window) -> Self {
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -52,34 +53,38 @@ impl App {
             (size, surface)
         };
 
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            })
-            .await
-            .unwrap();
+        let adapter = pollster::block_on(async {
+            instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::default(),
+                    compatible_surface: Some(&surface),
+                    force_fallback_adapter: false,
+                })
+                .await
+                .unwrap()
+        });
         println!("Adapter: {:?}", adapter.get_info());
         println!("Surface: {:?}", surface.get_capabilities(&adapter));
         //device and queue
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
-                    // WebGL doesn't support all of wgpu's features, so if
-                    // we're building for the web we'll have to disable some.
-                    limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits::default()
+        let (device, queue) = pollster::block_on(async {
+            adapter
+                .request_device(
+                    &wgpu::DeviceDescriptor {
+                        features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
+                        // WebGL doesn't support all of wgpu's features, so if
+                        // we're building for the web we'll have to disable some.
+                        limits: if cfg!(target_arch = "wasm32") {
+                            wgpu::Limits::downlevel_webgl2_defaults()
+                        } else {
+                            wgpu::Limits::default()
+                        },
+                        label: None,
                     },
-                    label: None,
-                },
-                None, // Trace path
-            )
-            .await
-            .unwrap();
+                    None, // Trace path
+                )
+                .await
+                .unwrap()
+        });
         let mut config = surface
             .get_default_config(&adapter, size.width, size.height)
             .expect("Surface isn't supported by the adapter.");
@@ -167,13 +172,16 @@ impl App {
     }
 }
 
-pub async fn run() {
+pub fn run() {
     env_logger::init();
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
-    // let mut app = App::new(window).await;
-    // create app to be used in two threads
-    let mut app = App::new(window).await;
+    let window = WindowBuilder::new()
+        .with_min_inner_size(Size::Logical(LogicalSize::new(640.0, 480.0)))
+        .with_inner_size(Size::Logical(LogicalSize::new(1280.0, 720.0)))
+        .with_title("heat-wgpu")
+        .build(&event_loop)
+        .unwrap();
+    let mut app = App::new(window);
 
     event_loop.run(move |event, _, control_flow| {
         match event {
