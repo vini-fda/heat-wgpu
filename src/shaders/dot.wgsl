@@ -1,6 +1,6 @@
 @group(0) @binding(0) var input_vec_a: texture_storage_2d<r32float, read>;
 @group(0) @binding(1) var input_vec_b: texture_storage_2d<r32float, read>;
-@group(0) @binding(2) var<storage, write> output: f32;
+@group(0) @binding(2) var<storage, read_write> output: f32;
 
 @compute @workgroup_size(16)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {

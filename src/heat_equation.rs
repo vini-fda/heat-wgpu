@@ -167,6 +167,7 @@ impl HeatEquation {
         });
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Initial SpMV Compute Pass (tmp = B*U)"),
+            timestamp_writes: None,
         });
         if self.iteration % 2 == 0 {
             self.initial_spmv_forward.add_to_pass(&mut compute_pass);
@@ -190,6 +191,7 @@ impl HeatEquation {
         });
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Write to Texture Compute Pass"),
+            timestamp_writes: None,
         });
         if self.iteration % 2 == 0 {
             self.write_to_texture_forward.add_to_pass(&mut compute_pass);

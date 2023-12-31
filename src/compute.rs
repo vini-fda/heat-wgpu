@@ -115,6 +115,7 @@ impl Compute {
         );
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Heat pass"),
+            timestamp_writes: None,
         });
         compute_pass.set_pipeline(&self.pipeline);
         compute_pass.set_bind_group(0, self.bind_group.get(direction), &[]);
