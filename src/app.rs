@@ -1,13 +1,5 @@
-use wgpu::InstanceFlags;
-use winit::keyboard::PhysicalKey::Code;
-use winit::{
-    event::*,
-    event_loop::{ControlFlow, EventLoop},
-    keyboard::KeyCode,
-    window::{Window, WindowBuilder},
-};
-
 use crate::{heat_equation::HeatEquation, renderer::Renderer};
+use winit::window::Window;
 
 pub struct App {
     surface: wgpu::Surface,
