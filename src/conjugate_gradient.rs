@@ -108,7 +108,10 @@ impl CG {
             label: Some("Conjugate Gradient"),
         });
         // Initialize r = b - A * x
-        let cdescriptor = wgpu::ComputePassDescriptor { label: None };
+        let cdescriptor = wgpu::ComputePassDescriptor {
+            label: None,
+            timestamp_writes: None,
+        };
         let mut compute_pass = encoder.begin_compute_pass(&cdescriptor);
         for stage in self.init_stages.iter() {
             stage.add_to_pass(&mut compute_pass);
@@ -117,8 +120,10 @@ impl CG {
         encoder.copy_buffer_to_buffer(r, 0, p, 0, r.size());
         // describes all the stages in a single iteration of the CG algorithm
         for _ in 0..self.max_steps {
-            let mut compute_pass =
-                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: None,
+                timestamp_writes: None,
+            });
             for s in self.stages.iter() {
                 s.add_to_pass(&mut compute_pass);
             }

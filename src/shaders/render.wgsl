@@ -46,8 +46,8 @@ fn TurboColormap(x: f32) -> vec3<f32> {
   let kGreenVec2: vec2<f32> = vec2<f32>(4.27729857, 2.82956604);
   let kBlueVec2: vec2<f32> = vec2<f32>(-89.90310912, 27.34824973);
   
-  var x = clamp(x, 0.0, 1.0);
-  var v4: vec4<f32> = vec4<f32>(1.0, x, x * x, x * x * x);
+  let y = clamp(x, 0.0, 1.0);
+  var v4: vec4<f32> = vec4<f32>(1.0, y, y * y, y * y * y);
   var v2: vec2<f32> = v4.zw * v4.z;
   return vec3<f32>(
     dot(v4, kRedVec4) + dot(v2, kRedVec2),

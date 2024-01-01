@@ -2,7 +2,7 @@
 @group(0) @binding(1) var<uniform> params: DIAMatrixParams;
 @group(0) @binding(2) var<storage, read> data: array<f32>;
 @group(0) @binding(3) var<storage, read> offsets: array<i32>;
-@group(0) @binding(4) var<storage, write> output_vec: array<f32>;
+@group(0) @binding(4) var<storage, read_write> output_vec: array<f32>;
 
 // Diagonal representation of a matrix A
 struct DIAMatrixParams {

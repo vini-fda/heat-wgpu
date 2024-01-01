@@ -1,55 +1,31 @@
-use winit::{
-    event::*,
-    event_loop::{ControlFlow, EventLoop},
-    window::{Window, WindowBuilder},
-};
-
 use crate::{heat_equation::HeatEquation, renderer::Renderer};
+use winit::window::Window;
 
-struct App {
+pub struct App {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
-    window: Window,
     heat_eqn: HeatEquation,
     renderer: Renderer,
 }
 
 impl App {
     // Creating some of the wgpu types requires async code
-    async fn new(window: Window) -> Self {
+    pub async fn new(window: &Window) -> Self {
+        let size = window.inner_size();
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
-            dx12_shader_compiler: Default::default(),
+            ..Default::default()
         });
 
-        // # Safety
-        //
-        // The surface needs to live as long as the window that created it.
-        // State owns the window so this should be safe.
-        let (size, surface) = unsafe {
-            let size = window.inner_size();
-
-            #[cfg(any(not(target_arch = "wasm32"), target_os = "emscripten"))]
-            let surface = instance.create_surface(&window).unwrap();
-            #[cfg(all(target_arch = "wasm32", not(target_os = "emscripten")))]
-            let surface = {
-                if let Some(offscreen_canvas_setup) = &offscreen_canvas_setup {
-                    log::info!("Creating surface from OffscreenCanvas");
-                    instance.create_surface_from_offscreen_canvas(
-                        offscreen_canvas_setup.offscreen_canvas.clone(),
-                    )
-                } else {
-                    instance.create_surface(&window)
-                }
-            }
-            .unwrap();
-
-            (size, surface)
+        let surface = unsafe {
+            instance
+                .create_surface(&window)
+                .expect("Surface creation failed")
         };
 
         let adapter = instance
@@ -133,7 +109,6 @@ impl App {
         let renderer = Renderer::new(&device, &config, texture_view);
 
         Self {
-            window,
             surface,
             device,
             queue,
@@ -144,11 +119,7 @@ impl App {
         }
     }
 
-    pub fn window(&self) -> &Window {
-        &self.window
-    }
-
-    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
             self.config.width = new_size.width;
@@ -157,83 +128,22 @@ impl App {
         }
     }
 
-    fn compute_step(&mut self) {
+    /// Specific method created for use
+    /// when there's a `WindowEvent::RedrawRequested` and
+    /// a `Err(wgpu::SurfaceError::Lost)` occurs.
+    pub fn reacquire_size(&mut self) {
+        let new_size = self.size;
+        self.resize(new_size);
+    }
+
+    pub fn update(&mut self) {
         self.heat_eqn.compute_step(&self.device, &self.queue);
     }
 
-    fn render(&self) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&self, window: &Window) -> Result<(), wgpu::SurfaceError> {
         self.renderer
-            .render(&self.device, &self.surface, &self.queue)
+            .render(window, &self.device, &self.surface, &self.queue)
     }
-}
-
-pub async fn run() {
-    env_logger::init();
-    let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
-    // let mut app = App::new(window).await;
-    // create app to be used in two threads
-    let mut app = App::new(window).await;
-
-    event_loop.run(move |event, _, control_flow| {
-        match event {
-            Event::RedrawEventsCleared => {
-                // TODO: in the wgpu example, an async executor is used for polling
-                // we need to check how to sync the compute step with the render step
-                // spawner.run_until_stalled();
-
-                app.window().request_redraw();
-            }
-            Event::WindowEvent {
-                event:
-                    WindowEvent::Resized(size)
-                    | WindowEvent::ScaleFactorChanged {
-                        new_inner_size: &mut size,
-                        ..
-                    },
-                ..
-            } => {
-                log::info!("Resizing to {:?}", size);
-                app.resize(size);
-                app.surface.configure(&app.device, &app.config);
-            }
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                }
-                WindowEvent::KeyboardInput {
-                    input:
-                        winit::event::KeyboardInput {
-                            virtual_keycode: Some(keycode),
-                            state: ElementState::Pressed,
-                            ..
-                        },
-                    ..
-                } => {
-                    if keycode == VirtualKeyCode::Escape {
-                        *control_flow = ControlFlow::Exit
-                    }
-                }
-                _ => {
-                    // TODO example.update(event);
-                }
-            },
-            Event::RedrawRequested(window_id) if window_id == app.window().id() => {
-                app.compute_step();
-
-                match app.render() {
-                    Ok(_) => {}
-                    // Reconfigure the surface if lost
-                    Err(wgpu::SurfaceError::Lost) => app.resize(app.size),
-                    // The system is out of memory, we should probably quit
-                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    // All other errors (Outdated, Timeout) should be resolved by the next frame
-                    Err(e) => eprintln!("{:?}", e),
-                }
-            }
-            _ => {}
-        }
-    });
 }
 
 fn gaussian(x: f32) -> f32 {

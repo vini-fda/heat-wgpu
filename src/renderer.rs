@@ -1,5 +1,6 @@
 use crate::vertex::Vertex;
 use wgpu::util::DeviceExt;
+use winit::window::Window;
 
 const VERTICES: &[Vertex] = &[
     crate::vertex!([-1.0, 1.0, 0.0], [0.0, 0.0]), // top left
@@ -144,6 +145,7 @@ impl Renderer {
     }
     pub fn render(
         &self,
+        window: &Window,
         device: &wgpu::Device,
         surface: &wgpu::Surface,
         queue: &wgpu::Queue,
@@ -162,10 +164,12 @@ impl Renderer {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: true,
+                    store: wgpu::StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
         });
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
@@ -173,6 +177,8 @@ impl Renderer {
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         drop(render_pass);
+
+        window.pre_present_notify();
 
         queue.submit(std::iter::once(encoder.finish()));
         output.present();
